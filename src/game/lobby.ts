@@ -143,6 +143,7 @@ function assignWolves(lobby: Lobby): void {
   const alive = [...lobby.players.values()].filter((p) => p.alive);
   if (lobby.gameMode === "wolveless") return;
 
+  // "local" and "standard" both assign exactly 1 wolf
   const count = lobby.gameMode === "multi-wolf"
     ? Math.min(lobby.wolfCount, Math.floor(alive.length / 2))
     : 1;
@@ -171,6 +172,9 @@ function startDiscussion(io: Server, lobby: Lobby) {
 }
 
 function scheduleBotMessages(io: Server, lobby: Lobby) {
+  // In local mode there are no bots; skip entirely
+  if (lobby.gameMode === "local") return;
+
   const bots = [...lobby.players.values()].filter((p) => p.isBot && p.alive);
   if (bots.length === 0) return;
 
@@ -308,6 +312,7 @@ function resolveVotes(io: Server, lobby: Lobby) {
       const majorityColor = redCount >= blueCount ? "red" : "blue";
       wolfBiteActivated = allWolvesAgree && redCount !== blueCount && wolfVote === majorityColor;
     } else {
+      // "standard" and "local" share the same bite logic
       const majorityColor = redCount > blueCount ? "red" : (blueCount > redCount ? "blue" : null);
       wolfBiteActivated = majorityColor !== null && wolfVote === majorityColor;
     }
@@ -449,7 +454,7 @@ export function setupLobbyHandlers(io: Server) {
         hostId: socket.id,
         isPrivate: !!data.isPrivate,
         difficulty: (["easy", "normal", "hard"].includes(data.difficulty) ? data.difficulty : "normal") as any,
-        gameMode: (["standard", "wolveless", "multi-wolf"].includes(data.gameMode) ? data.gameMode : "standard") as any,
+        gameMode: (["standard", "wolveless", "multi-wolf", "local"].includes(data.gameMode) ? data.gameMode : "standard") as any,
         wolfCount: Math.max(2, Math.min(10, Number(data.wolfCount) || 2)),
         phase: "lobby",
         players: new Map([[socket.id, player]]),
@@ -465,10 +470,14 @@ export function setupLobbyHandlers(io: Server) {
         botTimers: [],
       };
 
-      const botCount = Math.max(0, Math.min(MAX_PLAYERS - 1, Number(data.botCount) || 0));
+      // Local (in-person) mode never allows bots — players are physically present
+      const effectiveBotCount = lobby.gameMode === "local"
+        ? 0
+        : Math.max(0, Math.min(MAX_PLAYERS - 1, Number(data.botCount) || 0));
+
       const usedNames = new Set<string>();
       const allBotNames = BOT_NAMES();
-      for (let i = 0; i < botCount; i++) {
+      for (let i = 0; i < effectiveBotCount; i++) {
         const available = allBotNames.filter((n) => !usedNames.has(n));
         const name = available.length > 0
           ? available[Math.floor(Math.random() * available.length)]
@@ -591,6 +600,7 @@ export function setupLobbyHandlers(io: Server) {
       if (!lobbyId) return;
       const lobby = lobbies.get(lobbyId);
       if (!lobby || lobby.phase !== "discussion") return;
+      if (lobby.gameMode === "local") return; // No chat in local/in-person mode
       const player = lobby.players.get(socket.id);
       if (!player || !player.alive) return;
 
