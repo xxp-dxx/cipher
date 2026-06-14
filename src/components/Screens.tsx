@@ -3,6 +3,7 @@ import { GameState, Player, Difficulty, GameMode } from "../types";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { motion, AnimatePresence } from "framer-motion";
+import { useMobile } from "../hooks/use-mobile";
 
 // ── Countdown hook ─────────────────────────────────────────────────────────────
 function useCountdown(endsAt: number | null) {
@@ -108,6 +109,8 @@ function DiscussionScreen({
   const [msg, setMsg] = useState("");
   const chatRef = useRef<HTMLDivElement>(null);
   const isSpectator = gameState.isSpectator;
+  const isMobile = useMobile();
+  const [showPlayerOverlay, setShowPlayerOverlay] = useState(false);
 
   useEffect(() => {
     if (chatRef.current) {
@@ -122,7 +125,146 @@ function DiscussionScreen({
   };
 
   const alivePlayer = gameState.players.find((p) => p.isYou && p.alive);
+  const aliveCount = gameState.players.filter((p) => p.alive).length;
 
+  // ── Mobile layout ──────────────────────────────────────────────────────────
+  if (isMobile) {
+    return (
+      <motion.div
+        key="discussion"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0, scale: 0.95 }}
+        className="bg-black text-gray-300 font-mono flex flex-col"
+        style={{ height: "100dvh" }}
+      >
+        {gameState.youAreWolf && <WolfBanner gameMode={gameState.gameMode} />}
+        {isSpectator && <SpectatorBanner />}
+
+        {/* Mobile header: round + timer + alive count + player toggle */}
+        <div className="flex items-center justify-between px-4 py-2 border-b border-zinc-900 shrink-0">
+          <div className="text-[10px] tracking-widest text-zinc-500">
+            RND <span className="text-white">{String(gameState.round).padStart(2, "0")}</span>
+          </div>
+          <motion.div
+            key={sLeft}
+            animate={isUrgent ? { scale: [1, 1.05, 1] } : {}}
+            transition={{ duration: 0.4, repeat: isUrgent ? Infinity : 0 }}
+            className="text-3xl font-bold tabular-nums tracking-widest"
+            style={{ color: isUrgent ? "#DC143C" : msLeft === 0 ? "#52525b" : "#e4e4e7" }}
+          >
+            {fmtMmSs(msLeft)}
+          </motion.div>
+          <button
+            onClick={() => setShowPlayerOverlay(true)}
+            className="flex flex-col items-center border border-zinc-800 px-2 py-1 active:border-zinc-600 transition-colors"
+          >
+            <span className="text-white text-sm font-bold tabular-nums leading-none">{aliveCount}</span>
+            <span className="text-zinc-600 text-[8px] tracking-widest">ALIVE</span>
+          </button>
+        </div>
+
+        {/* Wolf/mode footer hint */}
+        <div className="px-4 py-1 border-b border-zinc-900 text-right shrink-0">
+          <span className="text-[9px] tracking-widest" style={{ color: "#27272a" }}>
+            {gameState.gameMode === "multi-wolf"
+              ? `${gameState.wolfCount} OF YOU ARE WOLVES.`
+              : gameState.gameMode === "wolveless"
+              ? "NO WOLF THIS ROUND."
+              : "ONE OF YOU IS THE WOLF."}
+          </span>
+        </div>
+
+        {/* Chat — fills remaining height */}
+        <div ref={chatRef} className="flex-1 overflow-y-auto px-3 py-2 space-y-1">
+          {gameState.chat.length === 0 && (
+            <div className="text-zinc-700 text-xs tracking-widest text-center mt-8">
+              COMMUNICATION OPEN. CHOOSE YOUR WORDS CAREFULLY.
+            </div>
+          )}
+          {gameState.chat.map((m, i) => (
+            <div key={i} className="text-sm leading-snug">
+              <span className="text-zinc-500 text-[10px]">
+                [{new Date(m.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}]{" "}
+              </span>
+              <span className="text-[#DC143C] font-bold">{m.playerName}: </span>
+              <span className="text-gray-300">{m.text}</span>
+            </div>
+          ))}
+        </div>
+
+        {/* Input pinned to bottom */}
+        {!isSpectator ? (
+          <div className="flex gap-2 px-3 py-2 border-t border-zinc-900 shrink-0 safe-area-bottom">
+            <Input
+              value={msg}
+              onChange={(e) => setMsg(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && submit()}
+              placeholder={alivePlayer ? "TRANSMIT..." : "YOU ARE ELIMINATED."}
+              maxLength={300}
+              disabled={!alivePlayer}
+              className="bg-black border-zinc-800 font-mono text-sm rounded-none focus:border-zinc-500"
+            />
+            <Button
+              onClick={submit}
+              disabled={!alivePlayer}
+              variant="outline"
+              className="rounded-none border-zinc-700 font-mono text-xs tracking-widest shrink-0"
+            >
+              SEND
+            </Button>
+          </div>
+        ) : (
+          <div className="flex items-center justify-center py-2 border-t border-zinc-900 shrink-0">
+            <span className="text-[10px] tracking-widest text-zinc-700">SPECTATORS CANNOT TRANSMIT</span>
+          </div>
+        )}
+
+        {/* Player overlay — slides up from bottom */}
+        <AnimatePresence>
+          {showPlayerOverlay && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-50 bg-black/80"
+              onClick={() => setShowPlayerOverlay(false)}
+            >
+              <motion.div
+                initial={{ y: "100%" }}
+                animate={{ y: 0 }}
+                exit={{ y: "100%" }}
+                transition={{ type: "spring", damping: 28, stiffness: 300 }}
+                className="absolute bottom-0 left-0 right-0 bg-black border-t border-zinc-800 max-h-[70dvh] flex flex-col"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-900">
+                  <span className="text-[10px] tracking-widest text-zinc-500">
+                    SUBJECTS — {aliveCount} ALIVE / {gameState.players.filter(p => !p.alive).length} ELIMINATED
+                  </span>
+                  <button
+                    onClick={() => setShowPlayerOverlay(false)}
+                    className="text-zinc-600 text-xs tracking-widest hover:text-zinc-300 transition-colors"
+                  >
+                    CLOSE
+                  </button>
+                </div>
+                <div className="overflow-y-auto p-3">
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {gameState.players.map((p) => (
+                      <PlayerTile key={p.id} player={p} />
+                    ))}
+                  </div>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </motion.div>
+    );
+  }
+
+  // ── Desktop layout (original) ──────────────────────────────────────────────
   return (
     <motion.div
       key="discussion"
@@ -235,6 +377,7 @@ function VotingScreen({
   const [hovered, setHovered] = useState<"red" | "blue" | null>(null);
   const isSpectator = gameState.isSpectator;
   const alivePlayer = gameState.players.find((p) => p.isYou && p.alive);
+  const isMobile = useMobile();
 
   const handleVote = (color: "red" | "blue") => {
     if (chosen || isSpectator || !alivePlayer) return;
@@ -242,26 +385,38 @@ function VotingScreen({
     castVote(color);
   };
 
-  return (
-    <motion.div
-      key="voting"
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      className="h-screen flex flex-col bg-black overflow-hidden"
-      style={{
+  // Shared background gradient (desktop horizontal, mobile vertical)
+  const bgStyle = isMobile
+    ? {
+        background:
+          hovered === "red"
+            ? "radial-gradient(ellipse at 50% 25%, rgba(220,20,60,0.10) 0%, black 70%)"
+            : hovered === "blue"
+            ? "radial-gradient(ellipse at 50% 75%, rgba(0,255,255,0.10) 0%, black 70%)"
+            : "black",
+      }
+    : {
         background:
           hovered === "red"
             ? "radial-gradient(ellipse at 25% 50%, rgba(220,20,60,0.07) 0%, black 60%)"
             : hovered === "blue"
             ? "radial-gradient(ellipse at 75% 50%, rgba(0,255,255,0.07) 0%, black 60%)"
             : "black",
-      }}
+      };
+
+  return (
+    <motion.div
+      key="voting"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="flex flex-col bg-black overflow-hidden font-mono"
+      style={{ height: "100dvh", ...bgStyle }}
     >
       {gameState.youAreWolf && <WolfBanner gameMode={gameState.gameMode} />}
       {isSpectator && <SpectatorBanner />}
 
-      <div className="px-6 py-4">
+      <div className="px-6 py-4 shrink-0">
         <div className="text-center text-xs tracking-[0.4em] text-zinc-500 mb-2">
           {isSpectator ? "VOTE IN PROGRESS." : "MAKE YOUR CHOICE."}
         </div>
@@ -278,18 +433,31 @@ function VotingScreen({
         </div>
       </div>
 
-      <div className="flex flex-1">
+      {/* ── Vote area ── */}
+      <div className={`flex flex-1 ${isMobile ? "flex-col" : "flex-row"}`}>
         {isSpectator ? (
           <div className="w-full flex items-center justify-center">
             <div className="text-center space-y-6">
-              <div className="flex gap-12 items-center justify-center">
+              <div className={`flex ${isMobile ? "flex-col gap-8" : "gap-12"} items-center justify-center`}>
                 <div className="text-center">
-                  <div className="text-6xl font-bold tracking-widest" style={{ color: "#DC143C" }}>RED</div>
-                  <div className="text-zinc-600 text-xs tracking-widest mt-2">{gameState.players.filter(p => p.alive).length - gameState.votedCount} remaining</div>
+                  <div
+                    className={`font-bold tracking-widest ${isMobile ? "text-5xl" : "text-6xl"}`}
+                    style={{ color: "#DC143C" }}
+                  >
+                    RED
+                  </div>
+                  <div className="text-zinc-600 text-xs tracking-widest mt-2">
+                    {gameState.players.filter(p => p.alive).length - gameState.votedCount} remaining
+                  </div>
                 </div>
-                <div className="text-zinc-800 text-4xl">·</div>
+                {!isMobile && <div className="text-zinc-800 text-4xl">·</div>}
                 <div className="text-center">
-                  <div className="text-6xl font-bold tracking-widest" style={{ color: "#00FFFF" }}>BLUE</div>
+                  <div
+                    className={`font-bold tracking-widest ${isMobile ? "text-5xl" : "text-6xl"}`}
+                    style={{ color: "#00FFFF" }}
+                  >
+                    BLUE
+                  </div>
                 </div>
               </div>
               <div className="text-zinc-600 text-xs tracking-widest">OBSERVING VOTE</div>
@@ -304,7 +472,7 @@ function VotingScreen({
               className="text-center"
             >
               <div
-                className="text-8xl font-bold tracking-widest mb-6"
+                className={`font-bold tracking-widest mb-6 ${isMobile ? "text-6xl" : "text-8xl"}`}
                 style={{ color: chosen === "red" ? "#DC143C" : "#00FFFF" }}
               >
                 {chosen.toUpperCase()}
@@ -312,7 +480,44 @@ function VotingScreen({
               <div className="text-xs tracking-[0.5em] text-zinc-600">CHOICE LOCKED.</div>
             </motion.div>
           </div>
+        ) : isMobile ? (
+          /* ── Mobile: RED on top, BLUE on bottom ── */
+          <>
+            <button
+              onClick={() => handleVote("red")}
+              onTouchStart={() => setHovered("red")}
+              onTouchEnd={() => setHovered(null)}
+              onMouseEnter={() => setHovered("red")}
+              onMouseLeave={() => setHovered(null)}
+              className="flex-1 flex items-center justify-center border-b border-zinc-900 transition-all active:opacity-90"
+              style={{ background: hovered === "red" ? "rgba(220,20,60,0.15)" : "transparent" }}
+            >
+              <div className="text-center select-none">
+                <div className="text-7xl font-bold tracking-widest" style={{ color: "#DC143C" }}>
+                  RED
+                </div>
+                <div className="text-zinc-700 text-[10px] tracking-widest mt-2">TAP TO VOTE</div>
+              </div>
+            </button>
+            <button
+              onClick={() => handleVote("blue")}
+              onTouchStart={() => setHovered("blue")}
+              onTouchEnd={() => setHovered(null)}
+              onMouseEnter={() => setHovered("blue")}
+              onMouseLeave={() => setHovered(null)}
+              className="flex-1 flex items-center justify-center transition-all active:opacity-90"
+              style={{ background: hovered === "blue" ? "rgba(0,255,255,0.12)" : "transparent" }}
+            >
+              <div className="text-center select-none">
+                <div className="text-7xl font-bold tracking-widest" style={{ color: "#00FFFF" }}>
+                  BLUE
+                </div>
+                <div className="text-zinc-700 text-[10px] tracking-widest mt-2">TAP TO VOTE</div>
+              </div>
+            </button>
+          </>
         ) : (
+          /* ── Desktop: RED on left, BLUE on right (original) ── */
           <>
             <button
               onClick={() => handleVote("red")}
@@ -428,7 +633,7 @@ function ResolutionScreen({ gameState }: { gameState: GameState }) {
           )}
         </AnimatePresence>
 
-        {/* Wolf identity — FIX: always show wolf, even spectator */}
+        {/* Wolf identity */}
         {!res.overpopulation && step >= 3 && gameState.gameMode !== "wolveless" && (
           <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} className="space-y-2">
             <div className="text-[10px] tracking-widest text-zinc-600">RULE CHECK 2/3</div>
@@ -886,7 +1091,7 @@ export function Screens({
         >
           <div className="space-y-2">
             <motion.h1
-              className="text-6xl font-bold tracking-widest text-white"
+              className="text-4xl sm:text-6xl font-bold tracking-widest text-white"
               animate={{ opacity: [0.85, 1, 0.85] }}
               transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
             >
@@ -1076,7 +1281,7 @@ export function Screens({
         <div className="min-h-screen bg-black font-mono flex flex-col items-center justify-center p-8 space-y-10">
           <SpectatorBanner />
           <motion.h1
-            className="text-5xl font-bold tracking-widest"
+            className="text-4xl sm:text-5xl font-bold tracking-widest"
             style={{ color: phase === "victory" ? "#e4e4e7" : "#DC143C" }}
             animate={{ opacity: [0.7, 1, 0.7] }}
             transition={{ duration: 2, repeat: Infinity }}
@@ -1121,13 +1326,13 @@ export function Screens({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="p-6 max-w-4xl mx-auto space-y-8 min-h-screen"
+            className="p-4 sm:p-6 max-w-4xl mx-auto space-y-6 sm:space-y-8 min-h-screen"
           >
-            <div className="text-center space-y-4 border-b border-zinc-900 pb-8 pt-6">
+            <div className="text-center space-y-4 border-b border-zinc-900 pb-6 pt-4 sm:pb-8 sm:pt-6">
               <div className="text-xs tracking-[0.4em] text-zinc-500">
                 SUBJECTS ASSEMBLED: <span className="text-white">{gameState.playerCount}</span>/100
               </div>
-              <div className="text-5xl font-bold tracking-[0.3em] text-white bg-zinc-950 border border-zinc-800 inline-block px-10 py-4">
+              <div className="text-3xl sm:text-5xl font-bold tracking-[0.3em] text-white bg-zinc-950 border border-zinc-800 inline-block px-6 sm:px-10 py-3 sm:py-4">
                 {gameState.lobbyId}
               </div>
               <div className="text-[10px] tracking-widest text-zinc-600">LOBBY CODE — SHARE TO RECRUIT</div>
@@ -1150,12 +1355,12 @@ export function Screens({
               ))}
             </div>
 
-            <div className="flex flex-col items-center pt-4 space-y-4">
+            <div className="flex flex-col items-center pt-2 sm:pt-4 space-y-4">
               {isHost ? (
                 <Button
                   onClick={startGame}
                   disabled={gameState.playerCount < 8}
-                  className="rounded-none bg-[#DC143C] hover:bg-red-700 text-white px-16 py-6 text-xl tracking-[0.3em] disabled:bg-zinc-900 disabled:text-zinc-700"
+                  className="rounded-none bg-[#DC143C] hover:bg-red-700 text-white px-10 sm:px-16 py-5 sm:py-6 text-lg sm:text-xl tracking-[0.3em] disabled:bg-zinc-900 disabled:text-zinc-700 w-full sm:w-auto"
                 >
                   INITIATE SEQUENCE
                 </Button>
@@ -1184,10 +1389,11 @@ export function Screens({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="p-6 max-w-2xl mx-auto h-screen flex flex-col py-8"
+            className="p-4 sm:p-6 max-w-2xl mx-auto flex flex-col py-6 sm:py-8"
+            style={{ minHeight: "100dvh" }}
           >
-            <h2 className="text-lg font-bold text-[#DC143C] border-b border-red-900 pb-2 tracking-widest">RULE BRIEFING</h2>
-            <div className="flex-1 overflow-y-auto mt-4 border border-zinc-900 p-6 bg-zinc-950 text-sm text-zinc-400 space-y-4 leading-relaxed">
+            <h2 className="text-base sm:text-lg font-bold text-[#DC143C] border-b border-red-900 pb-2 tracking-widest">RULE BRIEFING</h2>
+            <div className="flex-1 overflow-y-auto mt-4 border border-zinc-900 p-4 sm:p-6 bg-zinc-950 text-sm text-zinc-400 space-y-4 leading-relaxed">
               <p className="text-white font-bold tracking-widest">THE SETUP</p>
               {gameState.gameMode === "wolveless" ? (
                 <p>Up to 100 players. Minimum 8. This game has no Wolf — rounds are resolved by pure vote mechanics.</p>
@@ -1225,7 +1431,7 @@ export function Screens({
               <Button
                 onClick={acknowledgeRules}
                 disabled={gameState.players.find((p: Player) => p.isYou)?.acknowledged}
-                className="w-full rounded-none bg-[#DC143C] hover:bg-red-700 text-white py-6 text-lg tracking-[0.3em] uppercase disabled:bg-zinc-900 disabled:text-zinc-600"
+                className="w-full rounded-none bg-[#DC143C] hover:bg-red-700 text-white py-5 sm:py-6 text-base sm:text-lg tracking-[0.3em] uppercase disabled:bg-zinc-900 disabled:text-zinc-600"
               >
                 {gameState.players.find((p: Player) => p.isYou)?.acknowledged ? "ACKNOWLEDGED" : "ACKNOWLEDGE & ENTER"}
               </Button>
@@ -1257,10 +1463,10 @@ export function Screens({
             key="game_over"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className="min-h-screen flex flex-col items-center justify-center p-8 bg-black space-y-10"
+            className="min-h-screen flex flex-col items-center justify-center p-6 sm:p-8 bg-black space-y-8 sm:space-y-10"
           >
             <motion.h1
-              className="text-7xl font-bold tracking-widest"
+              className="text-4xl sm:text-7xl font-bold tracking-widest text-center"
               style={{ color: "#DC143C" }}
               animate={{ opacity: [0.7, 1, 0.7] }}
               transition={{ duration: 2, repeat: Infinity }}
@@ -1280,10 +1486,10 @@ export function Screens({
             key="victory"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className="min-h-screen flex flex-col items-center justify-center p-8 bg-black space-y-10"
+            className="min-h-screen flex flex-col items-center justify-center p-6 sm:p-8 bg-black space-y-8 sm:space-y-10"
           >
             <motion.h1
-              className="text-7xl font-bold tracking-widest text-white"
+              className="text-4xl sm:text-7xl font-bold tracking-widest text-white text-center"
               animate={{ opacity: [0.8, 1, 0.8] }}
               transition={{ duration: 3, repeat: Infinity }}
             >
