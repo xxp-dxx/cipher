@@ -29,5 +29,18 @@ export const BLIND_MARTYR_PCT: Record<Difficulty, number> = {
 export const MIN_PLAYERS = 8;
 export const MAX_PLAYERS = 100;
 
+export const MIN_PLAYERS_SMALL = 5;
+export const MAX_PLAYERS_SMALL = 7;
+
+import type { GameMode } from "./types.js";
+
+export function getMinPlayers(gameMode: GameMode): number {
+  return gameMode === "compact" || gameMode === "local-compact" ? MIN_PLAYERS_SMALL : MIN_PLAYERS;
+}
+
+export function getMaxPlayers(gameMode: GameMode): number {
+  return gameMode === "compact" || gameMode === "local-compact" ? MAX_PLAYERS_SMALL : MAX_PLAYERS;
+}
+
 export const CONDITION_CHECK_DURATION_MS = 7_000;
-export const RESOLUTION_DURATION_MS = 10_000;
+export const RESOLUTION_DURATION_MS = 13_000;
