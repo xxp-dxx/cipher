@@ -21,113 +21,47 @@ export interface BotContext {
   wolfCount?: number;
 }
 
-// ─── The Wolf game rules (for prompts) ───────────────────────────────────────
-//
-// Each round ONE player is secretly "the wolf."
-// Everyone votes RED or BLUE. Resolution order:
-//   1. If blue > 70%: OVERPOPULATION — everyone dies. Game over.
-//   2. If wolf voted majority: wolf's BITE activates → minority voters all die.
-//   3. Standard: if red ≥ blue → blue voters die. If blue 51–70% → peaceful, no deaths.
-//
-// Clear conditions (end the game):
-//   - BLOODBATH: survivors ≤ threshold (~30% of start). Survivors go free.
-//   - BLIND MARTYR: wolf voted blue AND blue ≤ 30% → wolf + blue voters die, rest go free.
-//
-// Innocent win condition: survive until a clear condition is met.
-// Wolf win condition: activate the bite (vote with the majority) and kill the minority.
-//
-// Key insight: this is NOT "find the wolf". Players cannot identify the wolf from voting alone.
-// The game is about VOTE COORDINATION. Red is always safe for you (you survive).
-// Blue is risky: only safe if 51–70% go blue. Above 70% = everyone dies.
-// The wolf will always try to be in the majority — so coordinating a clean majority is dangerous.
+// ─── Game rules summary ───────────────────────────────────────────────────────
+// Overpopulation: blue > 70% → everyone dies.
+// Wolf bite: wolf voted majority → minority voters die.
+// Standard: red ≥ blue → blue die. Blue 51–70% → peace (no deaths).
+// Clear: bloodbath (survivors ≤ threshold) or blind martyr (wolf voted blue AND blue ≤ 30%).
 
-const GAME_RULES = `
-THE WOLF game rules — read carefully, these determine your strategy:
-
-Each round, one random player is secretly the wolf. No one knows who.
-
-VOTE RESOLUTION (in strict order):
-1. OVERPOPULATION: if more than 70% vote Blue → everyone alive dies. Total wipeout.
-2. WOLF BITE: if the wolf voted for the majority color → all minority voters die.
-3. STANDARD: if Red ≥ Blue → Blue voters die. If Blue is 51–70% → peaceful round, no deaths.
-
-GAME ENDS when:
-- BLOODBATH: survivors drop to ≤ the bloodbath threshold (good, survivors escape).
-- BLIND MARTYR: wolf voted Blue AND total Blue ≤ 30% → those players die, rest escape.
-
-WHAT THIS MEANS:
-- Red is always the safe vote for you — you survive red regardless.
-- Blue is a coordination bet. It only saves everyone if 51–70% choose it. Above 70% = everyone dies.
-- You cannot identify the wolf by looking at people. The wolf is random each round.
-- The wolf will always vote with whichever side is winning so their bite activates.
-- Chat is for COORDINATING THE VOTE — not for hunting anyone.
-`;
-
-// Truncate text at the last complete sentence within maxLen characters.
-// Falls back to a hard cut only if no sentence boundary is found.
+// Truncate at the last complete sentence within maxLen characters.
 function truncateAtSentence(text: string, maxLen: number): string {
   if (text.length <= maxLen) return text;
   const sub = text.slice(0, maxLen);
-  // Look for the last sentence-ending punctuation followed by a space or end
   const lastPunct = Math.max(
     sub.lastIndexOf(". "),
     sub.lastIndexOf("! "),
     sub.lastIndexOf("? "),
     sub.lastIndexOf(".\n"),
-    sub.lastIndexOf("!\n"),
-    sub.lastIndexOf("?\n"),
   );
-  if (lastPunct > maxLen * 0.4) {
-    return text.slice(0, lastPunct + 1).trim();
-  }
-  // If the text ends cleanly with punctuation already, keep it
+  if (lastPunct > maxLen * 0.4) return text.slice(0, lastPunct + 1).trim();
   const lastChar = sub.trimEnd().slice(-1);
-  if (lastChar === "." || lastChar === "!" || lastChar === "?") {
-    return sub.trimEnd();
-  }
-  return sub.trimEnd() + "...";
+  if (lastChar === "." || lastChar === "!" || lastChar === "?") return sub.trimEnd();
+  return sub.trimEnd() + ".";
 }
 
 export async function generateBotMessage(ctx: BotContext): Promise<string> {
   const groq = getGroq();
   if (!groq) return getOfflineBotMessage(ctx);
 
-  const recentChatText = ctx.recentMessages.slice(-8).map(m => `${m.playerName}: ${m.text}`).join("\n");
+  const recentChatText = ctx.recentMessages.slice(-6).map(m => `${m.playerName}: ${m.text}`).join("\n");
   const noChat = !recentChatText;
 
   const systemPrompt = ctx.isWolf
-    ? `${GAME_RULES}
+    ? `You are ${ctx.botName} in a vote game. You are secretly the wolf.
+Game: everyone votes RED or BLUE. If blue > 70% everyone dies (overpopulation). If you (wolf) vote with the majority, the minority all die. Your goal: vote with the majority and activate your bite.
+Rules: ONE sentence only. 8-12 words max. Talk about vote strategy, not about being a wolf. Sound like a normal player. No greetings, no filler, no questions.`
+    : `You are ${ctx.botName} in a vote game. You are a regular player trying to survive.
+Game: everyone votes RED or BLUE. If blue > 70% everyone dies (overpopulation). Red is always safe. Blue only works if 51-70% vote blue. There's a hidden wolf who wants to vote with the majority.
+Strategy: Red is safe. Blue is risky. Warn about overpopulation if blue gets high.
+Rules: ONE sentence only. 8-12 words max. Talk tactics. No greetings, no filler, no questions.`;
 
-You are ${ctx.botName}. You are secretly the wolf this round.
-
-YOUR GOAL: activate your bite by voting with the majority. You win when the minority dies.
-
-Your chat strategy:
-- Push people toward whichever color will become the majority (usually Red is safer to push since it avoids overpopulation).
-- Sound like a normal player coordinating strategy. Talk about vote math, risk of overpopulation, survival odds.
-- Don't hint you're the wolf. No dramatic villain talk.
-- Reference what others said if there's chat. Agree with sensible points to look cooperative.
-- One or two sentences only. No questions. Statements and reads.
-- Mix sentence case with occasional emphasis (e.g. "that's a BLUE trap").`
-    : `${GAME_RULES}
-
-You are ${ctx.botName}. You are a regular player trying to survive.
-
-YOUR GOAL: survive long enough for a clear condition (bloodbath or blind martyr) to trigger. Red is safer. Blue only works as a coordinated bet.
-
-Your chat strategy:
-- Talk about vote coordination and survival math — not about "who the wolf is" (you can't know).
-- Warn about overpopulation if blue is trending high. Push red if things look chaotic.
-- Point out if blue coordination seems risky this round.
-- Reference what others said if there's chat. Agree or push back based on the vote math.
-- One or two sentences only. No questions. Statements.
-- Mix sentence case with occasional emphasis.`;
-
-  const userPrompt = `Round ${ctx.round}. Players alive: ${ctx.alivePlayers.join(", ")}.
-
-${noChat ? "Discussion just opened. Set the tone — talk about vote strategy." : `Recent chat:\n${recentChatText}`}
-
-Write your single message as ${ctx.botName}. Talk about vote strategy and survival math, not about identifying anyone.`;
+  const userPrompt = noChat
+    ? `Round ${ctx.round}, ${ctx.alivePlayers.length} alive. Say your opening take on the vote.`
+    : `Round ${ctx.round}. Recent chat:\n${recentChatText}\nYour response as ${ctx.botName}:`;
 
   try {
     const completion = await groq.chat.completions.create({
@@ -136,12 +70,14 @@ Write your single message as ${ctx.botName}. Talk about vote strategy and surviv
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },
       ],
-      max_tokens: 130,
-      temperature: 0.82,
+      max_tokens: 75,
+      temperature: 0.75,
     });
     const text = completion.choices[0]?.message?.content?.trim() ?? "";
     if (!text) return getOfflineBotMessage(ctx);
-    return truncateAtSentence(text, 240);
+    // Strip any "Name: " prefix the model might add
+    const cleaned = text.replace(/^[A-Z][A-Z0-9_-]+:\s*/i, "").trim();
+    return truncateAtSentence(cleaned, 160);
   } catch (err) {
     logger.warn({ err }, "Groq API error, using offline bot message");
     return getOfflineBotMessage(ctx);
@@ -153,61 +89,38 @@ export async function generateBotVote(ctx: BotContext & {
   blueCount: number;
   aliveCount: number;
 }): Promise<"red" | "blue"> {
+  // Compute current blue percentage
+  const currentBluePct = ctx.aliveCount > 0 ? (ctx.blueCount / ctx.aliveCount) * 100 : 0;
+
+  // Hard safety guard — if blue is already at 50%+, always red (don't risk overpop)
+  if (!ctx.isWolf && currentBluePct >= 50) return "red";
+
   const groq = getGroq();
   if (!groq) return getOfflineBotVote(ctx);
 
-  const redPct = ctx.aliveCount > 0 ? Math.round((ctx.redCount / ctx.aliveCount) * 100) : 50;
-  const bluePct = 100 - redPct;
   const remainingVoters = ctx.aliveCount - ctx.redCount - ctx.blueCount;
-  const chatSummary = ctx.recentMessages.slice(-10).map(m => `${m.playerName}: ${m.text}`).join("\n") || "(no chat)";
+  const chatSummary = ctx.recentMessages.slice(-6).map(m => `${m.playerName}: ${m.text}`).join("\n") || "(no chat)";
 
   const systemPrompt = ctx.isWolf
-    ? `${GAME_RULES}
-
-You are ${ctx.botName}, the wolf. Your ONLY goal: vote with whichever color will be the MAJORITY when all votes are in.
-
-Current votes: RED ${ctx.redCount} | BLUE ${ctx.blueCount} | ${remainingVoters} players haven't voted yet.
-Projected: RED ${redPct}% | BLUE ${bluePct}%
-
-Rules for your decision:
-- Vote for whichever color is currently leading (or likely to lead after remaining votes).
-- If it's close, vote Red — it's the natural default and avoids any overpopulation risk.
-- NEVER vote Blue if Blue is already above 60% (risks overpopulation which kills you too).
-- The bite activates when you're with the majority. Simple.
-
-Discussion so far:
-${chatSummary}
-
-Respond with ONLY the single word "red" or "blue".`
-    : `${GAME_RULES}
-
-You are ${ctx.botName}, a regular player. Your goal: survive.
-
-Current votes: RED ${ctx.redCount} | BLUE ${ctx.blueCount} | ${remainingVoters} players haven't voted yet.
-Projected: RED ${redPct}% | BLUE ${bluePct}%
-
-Decision rules (apply in order):
-1. If Blue is already at or above 60%: vote RED immediately. Blue is heading toward overpopulation and everyone dies.
-2. If Red is clearly winning (>55%): vote RED too — join the safe majority. Blue voters will die but you won't.
-3. If it's genuinely close (45–55% each): vote RED by default. Red is always safe for you. Blue is a gamble.
-4. Only vote Blue if there's a clear coordinated signal in the chat that a controlled blue majority (55–65%) is achievable AND current blue is not yet near 70%.
-
-Remember: overpopulation (blue > 70%) kills everyone including you. Red is survival unless you're coordinating a tight blue majority.
-
-Discussion so far:
-${chatSummary}
-
-Respond with ONLY the single word "red" or "blue".`;
+    ? `You are the wolf in a vote game. Vote with the MAJORITY color to activate your bite.
+Current votes: RED ${ctx.redCount}, BLUE ${ctx.blueCount}, ${remainingVoters} yet to vote.
+NEVER vote blue if blue is already above 60% (overpopulation kills everyone including you).
+Answer with ONLY the word "red" or "blue".`
+    : `You are a regular player. Vote to survive.
+Current votes: RED ${ctx.redCount} (${(ctx.redCount/ctx.aliveCount*100).toFixed(0)}%), BLUE ${ctx.blueCount} (${currentBluePct.toFixed(0)}%), ${remainingVoters} yet to vote.
+Overpopulation kills everyone if blue exceeds 70%.
+Rules: If blue is at 45%+: vote RED. If blue is 35-45% and chat explicitly coordinated a blue push: maybe blue. Otherwise: RED.
+Answer with ONLY the word "red" or "blue".`;
 
   try {
     const completion = await groq.chat.completions.create({
       model: "llama-3.1-8b-instant",
       messages: [
         { role: "system", content: systemPrompt },
-        { role: "user", content: "Cast your vote now." },
+        { role: "user", content: `Chat context:\n${chatSummary}\n\nCast your vote:` },
       ],
       max_tokens: 5,
-      temperature: 0.3,
+      temperature: 0.2,
     });
     const text = completion.choices[0]?.message?.content?.trim().toLowerCase() ?? "";
     if (text.includes("blue")) return "blue";
@@ -220,29 +133,25 @@ Respond with ONLY the single word "red" or "blue".`;
 
 function getOfflineBotMessage(ctx: BotContext): string {
   const redMessages = [
-    "Red is the only safe play this round. Don't gamble with blue.",
-    "We need to coordinate — red is the floor, blue is a bet we can't afford to lose.",
-    "Anyone pushing blue better have the numbers to back it up.",
-    "Red keeps us alive. Blue needs 51-70% to work, and I don't trust that coordination.",
-    "Think about the math: red is guaranteed survival. Blue is a high-stakes bet.",
-    "I'm going red until someone gives me a compelling reason not to.",
+    "Red is the safe play — blue needs perfect coordination.",
+    "I'm going red. Blue is too risky without coordination.",
+    "Don't risk blue unless we're all committing together.",
+    "Red keeps you alive. Blue is a bet we can't control.",
+    "Nobody should push blue unilaterally right now.",
   ];
-
   const blueMessages = [
-    "If we all coordinate on blue, we can hit the 51-70% window safely.",
-    "Blue is the move if enough of us commit. Are we committing?",
-    "The overpopulation risk is real but manageable if we cap it right.",
-    "I think blue is worth the risk this round — we need to work toward an exit condition.",
+    "If enough of us go blue we hit the safe window.",
+    "Blue works, but only if we actually coordinate.",
+    "I'm blue if others are — but we need the numbers.",
   ];
-
   const wolfMessages = [
-    "Red is the play. Overpopulation wipes everyone and that helps no one.",
-    "Anyone who pushes blue above 70% is handing everyone a death sentence.",
-    "I've run the math — red majority is survival. Blue is a gamble with your life.",
-    "Don't overthink it. Red is safe. Blue needs perfect coordination we don't have.",
+    "Red is the obvious call here — don't overthink it.",
+    "Anyone pushing blue is risking everyone's life.",
+    "Red majority is the only safe play this round.",
+    "Blue will get us all killed if it goes too high.",
   ];
 
-  const pool = ctx.isWolf ? wolfMessages : (Math.random() > 0.3 ? redMessages : blueMessages);
+  const pool = ctx.isWolf ? wolfMessages : (Math.random() > 0.25 ? redMessages : blueMessages);
   return pool[Math.floor(Math.random() * pool.length)];
 }
 
@@ -252,12 +161,11 @@ function getOfflineBotVote(ctx: BotContext & {
   aliveCount: number;
 }): "red" | "blue" {
   if (ctx.isWolf) {
-    // Wolf votes with the majority
     return ctx.redCount >= ctx.blueCount ? "red" : "blue";
   }
-  // Regular player: vote red unless blue is clearly safe
   const bluePct = ctx.aliveCount > 0 ? (ctx.blueCount / ctx.aliveCount) * 100 : 0;
-  if (bluePct >= 60) return "red"; // Overpopulation risk
-  if (bluePct > 45 && bluePct < 60 && Math.random() > 0.6) return "blue"; // Risky but possible
+  if (bluePct >= 45) return "red";
+  if (bluePct >= 30 && Math.random() > 0.88) return "blue";
+  if (bluePct < 30 && Math.random() > 0.80) return "blue";
   return "red";
 }
