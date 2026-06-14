@@ -5,6 +5,18 @@ import { Input } from "./ui/input";
 import { motion, AnimatePresence } from "framer-motion";
 import { useIsMobile } from "../hooks/use-mobile";
 
+// ── Profanity filter ──────────────────────────────────────────────────────────
+const BANNED_TERMS = [
+  "nigger","nigga","chink","spic","kike","faggot","retard","cunt",
+  "gook","wetback","tranny","beaner","cracker","dyke",
+];
+function isNameClean(name: string): string | null {
+  const lower = name.toLowerCase().replace(/[^a-z0-9]/g, "");
+  if (BANNED_TERMS.some((t) => lower.includes(t))) return "NAME FLAGGED. CHOOSE ANOTHER.";
+  if (name.trim().length < 2) return "NAME TOO SHORT.";
+  return null;
+}
+
 // ── Countdown hook ─────────────────────────────────────────────────────────────
 function useCountdown(endsAt: number | null) {
   const [msLeft, setMsLeft] = useState(0);
@@ -57,7 +69,7 @@ function PlayerTile({ player, highlight }: { player: Player; highlight?: "wolf" 
   );
 }
 
-// ── Wolf identity banner ───────────────────────────────────────────────────────
+// ── Cipher identity banner ─────────────────────────────────────────────────────
 function WolfBanner({ gameMode }: { gameMode: GameMode }) {
   return (
     <motion.div
@@ -72,7 +84,7 @@ function WolfBanner({ gameMode }: { gameMode: GameMode }) {
       }}
     >
       <span className="text-xs font-bold tracking-[0.4em]" style={{ color: "#FFBF00" }}>
-        {gameMode === "multi-wolf" ? "YOU ARE ONE OF THE WOLVES." : "YOU ARE THE WOLF."}
+        {gameMode === "multi-wolf" ? "YOU ARE ONE OF THE CIPHERS." : "YOU ARE THE CIPHER."}
       </span>
       <span className="text-[10px] tracking-widest ml-3" style={{ color: "#a16207" }}>
         YOUR IDENTITY IS SECRET.
@@ -127,6 +139,68 @@ function DiscussionScreen({
   const alivePlayer = gameState.players.find((p) => p.isYou && p.alive);
   const aliveCount = gameState.players.filter((p) => p.alive).length;
 
+  // ── Local / in-person mode — no chat, discuss verbally ─────────────────────
+  if (gameState.gameMode === "local") {
+    return (
+      <motion.div
+        key="discussion-local"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="bg-black text-gray-300 font-mono flex flex-col items-center justify-center"
+        style={{ minHeight: "100dvh" }}
+      >
+        {gameState.youAreWolf && <WolfBanner gameMode={gameState.gameMode} />}
+        <div className="space-y-8 text-center px-8 max-w-sm w-full">
+          <div className="space-y-2">
+            <div className="text-[10px] tracking-widest text-zinc-600">ROUND {String(gameState.round).padStart(2, "0")}</div>
+            <motion.div
+              key={sLeft}
+              animate={isUrgent ? { scale: [1, 1.06, 1] } : {}}
+              transition={{ duration: 0.4, repeat: isUrgent ? Infinity : 0 }}
+              className="text-7xl font-bold tabular-nums tracking-wider"
+              style={{ color: isUrgent ? "#DC143C" : msLeft === 0 ? "#52525b" : "#e4e4e7" }}
+            >
+              {fmtMmSs(msLeft)}
+            </motion.div>
+          </div>
+
+          <div className="border border-zinc-800 p-5 space-y-3">
+            <motion.div
+              animate={{ opacity: [0.6, 1, 0.6] }}
+              transition={{ duration: 2.5, repeat: Infinity }}
+              className="text-lg font-bold tracking-[0.3em] text-white"
+            >
+              DISCUSS VERBALLY
+            </motion.div>
+            <div className="text-[10px] tracking-widest text-zinc-600 leading-relaxed">
+              Talk to the group. Debate the vote.<br />No digital messages — words only.
+            </div>
+          </div>
+
+          <div className="grid grid-cols-3 gap-2">
+            {gameState.players.filter((p) => p.alive).map((p) => (
+              <div
+                key={p.id}
+                className="p-2 border text-center text-[9px] tracking-widest truncate"
+                style={{
+                  borderColor: p.isYou ? "#DC143C" : "#27272a",
+                  color: p.isYou ? "#DC143C" : "#71717a",
+                }}
+              >
+                {p.name}
+              </div>
+            ))}
+          </div>
+
+          <div className="text-[9px] tracking-widest text-zinc-700">
+            {aliveCount} ALIVE · VOTING OPENS WHEN TIMER ENDS
+          </div>
+        </div>
+      </motion.div>
+    );
+  }
+
   // ── Mobile layout ──────────────────────────────────────────────────────────
   if (isMobile) {
     return (
@@ -142,6 +216,7 @@ function DiscussionScreen({
         {isSpectator && <SpectatorBanner />}
 
         {/* Mobile header: round + timer + alive count + player toggle */}
+
         <div className="flex items-center justify-between px-4 py-2 border-b border-zinc-900 shrink-0">
           <div className="text-[10px] tracking-widest text-zinc-500">
             RND <span className="text-white">{String(gameState.round).padStart(2, "0")}</span>
@@ -168,10 +243,10 @@ function DiscussionScreen({
         <div className="px-4 py-1 border-b border-zinc-900 text-right shrink-0">
           <span className="text-[9px] tracking-widest" style={{ color: "#27272a" }}>
             {gameState.gameMode === "multi-wolf"
-              ? `${gameState.wolfCount} OF YOU ARE WOLVES.`
+              ? `${gameState.wolfCount} OF YOU ARE CIPHERS.`
               : gameState.gameMode === "wolveless"
-              ? "NO WOLF THIS ROUND."
-              : "ONE OF YOU IS THE WOLF."}
+              ? "NO CIPHER THIS ROUND."
+              : "ONE OF YOU IS THE CIPHER."}
           </span>
         </div>
 
@@ -353,10 +428,10 @@ function DiscussionScreen({
       <div className="px-4 py-2 border-t border-zinc-900 text-right">
         <span className="text-[10px] tracking-widest" style={{ color: "#3f3f46" }}>
           {gameState.gameMode === "multi-wolf"
-            ? `${gameState.wolfCount} OF YOU ARE WOLVES.`
+            ? `${gameState.wolfCount} OF YOU ARE CIPHERS.`
             : gameState.gameMode === "wolveless"
-            ? "NO WOLF THIS ROUND."
-            : "ONE OF YOU IS THE WOLF."}
+            ? "NO CIPHER THIS ROUND."
+            : "ONE OF YOU IS THE CIPHER."}
         </span>
       </div>
     </motion.div>
@@ -642,13 +717,13 @@ function ResolutionScreen({ gameState }: { gameState: GameState }) {
               style={{ borderColor: "#FFBF00", boxShadow: "0 0 12px rgba(255,191,0,0.2)" }}
             >
               <div className="text-sm font-bold tracking-widest mb-1" style={{ color: "#FFBF00" }}>
-                WOLF IDENTITY CONFIRMED
+                CIPHER IDENTITY CONFIRMED
               </div>
               <div className="text-white text-xs tracking-widest">
-                THE WOLF: <span style={{ color: "#FFBF00" }}>{res.wolfName}</span>
+                THE CIPHER: <span style={{ color: "#FFBF00" }}>{res.wolfName}</span>
               </div>
               <div className="text-zinc-400 text-xs tracking-widest mt-1">
-                THE WOLF VOTED:{" "}
+                THE CIPHER VOTED:{" "}
                 <span style={{ color: res.wolfVote === "red" ? "#DC143C" : "#00FFFF" }}>
                   {res.wolfVote.toUpperCase()}
                 </span>
@@ -660,11 +735,11 @@ function ResolutionScreen({ gameState }: { gameState: GameState }) {
                   transition={{ delay: 0.5 }}
                   className="mt-3 text-[#DC143C] text-xs tracking-widest font-bold"
                 >
-                  WOLF IN MAJORITY. THE MINORITY BLEEDS.
+                  CIPHER IN MAJORITY. THE MINORITY BLEEDS.
                 </motion.div>
               ) : (
                 <div className="mt-3 text-zinc-500 text-xs tracking-widest" style={{ textDecoration: "line-through" }}>
-                  WOLF IN MINORITY. BITE FAILED.
+                  CIPHER IN MINORITY. BITE FAILED.
                 </div>
               )}
             </div>
@@ -808,10 +883,10 @@ function ConditionCheckScreen({ gameState }: { gameState: GameState }) {
             >
               <div className="text-zinc-500 text-[10px] mb-1">CONDITION 2</div>
               <div className="text-white">
-                BLIND MARTYR: WOLF VOTED BLUE + BLUE ≤ {gameState.blindMartyrThresholdPct}%
+                BLIND MARTYR: CIPHER VOTED BLUE + BLUE ≤ {gameState.blindMartyrThresholdPct}%
               </div>
               <div className="text-xs mt-1" style={{ color: res.clearCondition === "blind_martyr" ? "#FFBF00" : "#52525b" }}>
-                {res.clearCondition === "blind_martyr" ? "THE WOLF HAS SACRIFICED THEMSELVES." : "NEGATIVE"}
+                {res.clearCondition === "blind_martyr" ? "THE CIPHER HAS SACRIFICED THEMSELVES." : "NEGATIVE"}
               </div>
             </div>
           )}
@@ -860,7 +935,7 @@ function PostMatchStats({ gameState }: { gameState: GameState }) {
         </div>
       </div>
       <div className="space-y-2">
-        <div className="text-[10px] tracking-widest text-zinc-600 border-b border-zinc-900 pb-1">WOLF HISTORY</div>
+        <div className="text-[10px] tracking-widest text-zinc-600 border-b border-zinc-900 pb-1">CIPHER HISTORY</div>
         {gameState.history.map((r) => (
           <div key={r.round} className="flex items-center justify-between text-xs border border-zinc-900 p-3">
             <span className="text-zinc-500">RND {String(r.round).padStart(2, "0")}</span>
@@ -926,7 +1001,7 @@ function SpectatorDashboard({ gameState }: { gameState: GameState }) {
           className="border p-3"
           style={{ borderColor: "#FFBF00", background: "rgba(255,191,0,0.03)" }}
         >
-          <div className="text-[9px] tracking-widest text-zinc-600 mb-1">CURRENT ROUND WOLF</div>
+          <div className="text-[9px] tracking-widest text-zinc-600 mb-1">CURRENT ROUND CIPHER</div>
           <div className="text-sm font-bold tracking-widest" style={{ color: "#FFBF00" }}>
             {gameState.resolution.wolfName}
           </div>
@@ -1078,6 +1153,44 @@ export function Screens({
   const [gameMode, setGameMode] = useState<GameMode>("standard");
   const [wolfCount, setWolfCount] = useState(2);
   const [tab, setTab] = useState<"play" | "spectate">("play");
+  const [nameError, setNameError] = useState<string | null>(null);
+  const [copiedCode, setCopiedCode] = useState(false);
+
+  const handleNameChange = (v: string) => {
+    setPlayerName(v.slice(0, 20));
+    setNameError(null);
+  };
+
+  const validateAndCreate = () => {
+    const err = isNameClean(playerName.trim());
+    if (err) { setNameError(err); return; }
+    createLobby(playerName.trim(), isPrivate, gameMode === "local" ? 0 : botCount, difficulty, gameMode, wolfCount);
+  };
+
+  const validateAndJoin = () => {
+    const err = isNameClean(playerName.trim());
+    if (err) { setNameError(err); return; }
+    joinLobby(joinCode, playerName.trim());
+  };
+
+  const validateAndFindMatch = () => {
+    const err = isNameClean(playerName.trim());
+    if (err) { setNameError(err); return; }
+    joinPublicLobby(playerName.trim());
+  };
+
+  const handleCopyCode = async () => {
+    if (!gameState) return;
+    if (typeof navigator.share === "function") {
+      try {
+        await navigator.share({ title: "THE CIPHER", text: `Join my game — lobby code: ${gameState.lobbyId}` });
+        return;
+      } catch { /* user dismissed or not supported */ }
+    }
+    await navigator.clipboard.writeText(gameState.lobbyId);
+    setCopiedCode(true);
+    setTimeout(() => setCopiedCode(false), 2000);
+  };
 
   // Home screen
   if (!gameState) {
@@ -1095,7 +1208,7 @@ export function Screens({
               animate={{ opacity: [0.85, 1, 0.85] }}
               transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
             >
-              THE WOLF
+              THE CIPHER
             </motion.h1>
             <p className="text-xs tracking-[0.5em] text-zinc-500 uppercase">A clinical death-game.</p>
           </div>
@@ -1127,34 +1240,49 @@ export function Screens({
 
           {tab === "play" ? (
             <div className="space-y-4">
-              <Input
-                placeholder="ENTER SUBJECT NAME"
-                value={playerName}
-                onChange={(e) => setPlayerName(e.target.value.slice(0, 20))}
-                className="text-center font-mono bg-zinc-950 border-zinc-800 focus:border-zinc-500 rounded-none tracking-widest"
-              />
+              <div className="space-y-1">
+                <Input
+                  placeholder="ENTER SUBJECT NAME"
+                  value={playerName}
+                  onChange={(e) => handleNameChange(e.target.value)}
+                  className="text-center font-mono bg-zinc-950 border-zinc-800 focus:border-zinc-500 rounded-none tracking-widest"
+                  style={{ borderColor: nameError ? "#DC143C" : undefined }}
+                />
+                {nameError && (
+                  <div className="text-[10px] tracking-widest text-[#DC143C] text-center">{nameError}</div>
+                )}
+              </div>
 
               {/* Difficulty */}
               <div className="border border-zinc-900 p-3 space-y-2">
                 <div className="text-[10px] tracking-widest text-zinc-600 text-left">DIFFICULTY</div>
                 <div className="flex gap-1.5">
-                  <DifficultyButton value="easy" current={difficulty} label="EASY" sub="40% thresholds · 3 min" onClick={() => setDifficulty("easy")} />
-                  <DifficultyButton value="normal" current={difficulty} label="NORMAL" sub="30% thresholds · 2 min" onClick={() => setDifficulty("normal")} />
-                  <DifficultyButton value="hard" current={difficulty} label="HARD" sub="20% thresholds · 1 min" onClick={() => setDifficulty("hard")} />
+                  <DifficultyButton value="easy" current={difficulty} label="EASY" sub="bloodbath ≤40% · martyr ≤40% · 3 min" onClick={() => setDifficulty("easy")} />
+                  <DifficultyButton value="normal" current={difficulty} label="NORMAL" sub="bloodbath ≤30% · martyr ≤30% · 2 min" onClick={() => setDifficulty("normal")} />
+                  <DifficultyButton value="hard" current={difficulty} label="HARD" sub="bloodbath ≤20% · martyr ≤20% · 1 min" onClick={() => setDifficulty("hard")} />
                 </div>
               </div>
 
               {/* Game mode */}
               <div className="border border-zinc-900 p-3 space-y-2">
                 <div className="text-[10px] tracking-widest text-zinc-600 text-left">GAME MODE</div>
-                <div className="flex gap-1.5">
-                  <DifficultyButton value="standard" current={gameMode} label="STANDARD" sub="1 wolf / round" onClick={() => setGameMode("standard")} />
-                  <DifficultyButton value="wolveless" current={gameMode} label="WOLVELESS" sub="No wolf, pure vote" onClick={() => setGameMode("wolveless")} />
-                  <DifficultyButton value="multi-wolf" current={gameMode} label="PACK" sub="Multiple wolves" onClick={() => setGameMode("multi-wolf")} />
+                <div className="space-y-1.5">
+                  <div className="flex gap-1.5">
+                    <DifficultyButton value="standard" current={gameMode} label="STANDARD" sub="1 cipher · full chat" onClick={() => setGameMode("standard")} />
+                    <DifficultyButton value="wolveless" current={gameMode} label="CIPHERLESS" sub="No cipher, pure vote" onClick={() => setGameMode("wolveless")} />
+                    <DifficultyButton value="multi-wolf" current={gameMode} label="PACK" sub="Multiple ciphers" onClick={() => setGameMode("multi-wolf")} />
+                  </div>
+                  <DifficultyButton
+                    value="local"
+                    current={gameMode}
+                    label="IN-PERSON"
+                    sub="Physical meetup · no bots · discuss verbally · no chat"
+                    onClick={() => setGameMode("local")}
+                  />
                 </div>
                 {gameMode === "multi-wolf" && (
                   <div className="flex items-center justify-between pt-1">
-                    <span className="text-[10px] tracking-widest text-zinc-600">WOLF COUNT</span>
+                    <span className="text-[10px] tracking-widest text-zinc-600">CIPHER COUNT</span>
                     <div className="flex items-center gap-3">
                       <button
                         onClick={() => setWolfCount((c) => Math.max(2, c - 1))}
@@ -1170,31 +1298,39 @@ export function Screens({
                 )}
               </div>
 
-              {/* Bot count */}
-              <div className="border border-zinc-900 p-3 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] tracking-widest text-zinc-600">BOTS</span>
-                  <div className="flex items-center gap-3">
-                    <button
-                      onClick={() => setBotCount((c) => Math.max(0, c - 1))}
-                      className="w-7 h-7 border border-zinc-800 text-zinc-400 hover:border-zinc-600 hover:text-white font-mono text-lg leading-none flex items-center justify-center transition-colors"
-                    >−</button>
-                    <span className="text-white font-bold text-lg tabular-nums w-8 text-center">{botCount}</span>
-                    <button
-                      onClick={() => setBotCount((c) => Math.min(99, c + 1))}
-                      className="w-7 h-7 border border-zinc-800 text-zinc-400 hover:border-zinc-600 hover:text-white font-mono text-lg leading-none flex items-center justify-center transition-colors"
-                    >+</button>
+              {/* Bot count — hidden in local/in-person mode */}
+              {gameMode !== "local" && (
+                <div className="border border-zinc-900 p-3 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] tracking-widest text-zinc-600">BOTS</span>
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={() => setBotCount((c) => Math.max(0, c - 1))}
+                        className="w-7 h-7 border border-zinc-800 text-zinc-400 hover:border-zinc-600 hover:text-white font-mono text-lg leading-none flex items-center justify-center transition-colors"
+                      >−</button>
+                      <span className="text-white font-bold text-lg tabular-nums w-8 text-center">{botCount}</span>
+                      <button
+                        onClick={() => setBotCount((c) => Math.min(99, c + 1))}
+                        className="w-7 h-7 border border-zinc-800 text-zinc-400 hover:border-zinc-600 hover:text-white font-mono text-lg leading-none flex items-center justify-center transition-colors"
+                      >+</button>
+                    </div>
                   </div>
+                  {botCount > 0 && (
+                    <div className="text-[10px] tracking-widest text-right"
+                      style={{ color: botCount + 1 >= 8 ? "#52525b" : "#DC143C" }}>
+                      {botCount + 1 >= 8
+                        ? `${botCount + 1} TOTAL — READY TO START`
+                        : `${8 - (botCount + 1)} MORE NEEDED FOR MINIMUM`}
+                    </div>
+                  )}
                 </div>
-                {botCount > 0 && (
-                  <div className="text-[10px] tracking-widest text-right"
-                    style={{ color: botCount + 1 >= 8 ? "#52525b" : "#DC143C" }}>
-                    {botCount + 1 >= 8
-                      ? `${botCount + 1} TOTAL — READY TO START`
-                      : `${8 - (botCount + 1)} MORE NEEDED FOR MINIMUM`}
-                  </div>
-                )}
-              </div>
+              )}
+              {gameMode === "local" && (
+                <div className="border border-zinc-900 p-3 text-[10px] tracking-widest text-zinc-600">
+                  IN-PERSON MODE — all players must join with their own device using the lobby code.
+                  No bots. No chat. Discuss the vote out loud.
+                </div>
+              )}
 
               <div className="flex items-center gap-3 justify-between">
                 <label className="text-[10px] tracking-widest text-zinc-600 flex items-center gap-2 cursor-pointer">
@@ -1202,7 +1338,7 @@ export function Screens({
                   PRIVATE
                 </label>
                 <Button
-                  onClick={() => playerName.trim() && createLobby(playerName.trim(), isPrivate, botCount, difficulty, gameMode, wolfCount)}
+                  onClick={() => playerName.trim() && validateAndCreate()}
                   disabled={!playerName.trim()}
                   variant="outline"
                   className="flex-1 rounded-none border-zinc-700 hover:bg-white hover:text-black font-mono tracking-wider"
@@ -1210,7 +1346,7 @@ export function Screens({
                   CREATE LOBBY
                 </Button>
                 <Button
-                  onClick={() => playerName.trim() && joinPublicLobby(playerName.trim())}
+                  onClick={() => playerName.trim() && validateAndFindMatch()}
                   disabled={!playerName.trim()}
                   variant="outline"
                   className="flex-1 rounded-none border-zinc-700 hover:bg-white hover:text-black font-mono tracking-wider"
@@ -1228,7 +1364,7 @@ export function Screens({
                   maxLength={6}
                 />
                 <Button
-                  onClick={() => playerName.trim() && joinCode.length === 6 && joinLobby(joinCode, playerName.trim())}
+                  onClick={() => playerName.trim() && joinCode.length === 6 && validateAndJoin()}
                   disabled={!playerName.trim() || joinCode.length !== 6}
                   variant="outline"
                   className="rounded-none border-zinc-700 hover:bg-white hover:text-black font-mono tracking-wider w-1/3"
@@ -1242,7 +1378,7 @@ export function Screens({
               <div className="border border-zinc-900 p-4 space-y-3">
                 <div className="text-[10px] tracking-widest text-zinc-600 text-left">OBSERVE A GAME</div>
                 <p className="text-[10px] text-zinc-700 tracking-widest text-left leading-relaxed">
-                  Enter a lobby code to watch a game in progress. You will see all player statuses, chat, and wolf identity. You cannot interact.
+                  Enter a lobby code to watch a game in progress. You will see all player statuses, chat, and cipher identity. You cannot interact.
                 </p>
                 <div className="flex gap-2">
                   <Input
@@ -1266,7 +1402,7 @@ export function Screens({
           )}
 
           <div className="text-[10px] tracking-widest text-zinc-700 border-t border-zinc-900 pt-4">
-            8 MINIMUM · 100 MAXIMUM · ONE OF THEM IS THE WOLF
+            8 MINIMUM · 100 MAXIMUM · ONE OF THEM IS THE CIPHER
           </div>
         </motion.div>
       </div>
@@ -1335,7 +1471,19 @@ export function Screens({
               <div className="text-3xl sm:text-5xl font-bold tracking-[0.3em] text-white bg-zinc-950 border border-zinc-800 inline-block px-6 sm:px-10 py-3 sm:py-4">
                 {gameState.lobbyId}
               </div>
-              <div className="text-[10px] tracking-widest text-zinc-600">LOBBY CODE — SHARE TO RECRUIT</div>
+              <div className="flex items-center justify-center gap-3">
+                <div className="text-[10px] tracking-widest text-zinc-600">LOBBY CODE — SHARE TO RECRUIT</div>
+                <button
+                  onClick={handleCopyCode}
+                  className="border px-2 py-0.5 text-[9px] tracking-widest font-mono transition-colors"
+                  style={{
+                    borderColor: copiedCode ? "#00FFFF" : "#3f3f46",
+                    color: copiedCode ? "#00FFFF" : "#52525b",
+                  }}
+                >
+                  {copiedCode ? "COPIED" : "COPY"}
+                </button>
+              </div>
               <div className="flex gap-4 justify-center text-[10px] tracking-widest text-zinc-700">
                 <span>{gameState.difficulty?.toUpperCase()}</span>
                 <span>·</span>
@@ -1396,19 +1544,19 @@ export function Screens({
             <div className="flex-1 overflow-y-auto mt-4 border border-zinc-900 p-4 sm:p-6 bg-zinc-950 text-sm text-zinc-400 space-y-4 leading-relaxed">
               <p className="text-white font-bold tracking-widest">THE SETUP</p>
               {gameState.gameMode === "wolveless" ? (
-                <p>Up to 100 players. Minimum 8. This game has no Wolf — rounds are resolved by pure vote mechanics.</p>
+                <p>Up to 100 players. Minimum 8. This game has no Cipher — rounds are resolved by pure vote mechanics.</p>
               ) : gameState.gameMode === "multi-wolf" ? (
-                <p>Up to 100 players. Minimum 8. Each round, <span className="text-[#FFBF00]">{gameState.wolfCount} random players</span> are secretly designated as Wolves. For the Pack Bite to activate, <span className="text-[#FFBF00]">all wolves must vote the same color</span>.</p>
+                <p>Up to 100 players. Minimum 8. Each round, <span className="text-[#FFBF00]">{gameState.wolfCount} random players</span> are secretly designated as Ciphers. For the Pack Bite to activate, <span className="text-[#FFBF00]">all ciphers must vote the same color</span>.</p>
               ) : (
-                <p>Up to 100 players. Minimum 8. Every round, one random player is secretly designated as The Wolf. <span className="text-[#FFBF00]">The Wolf knows their identity.</span></p>
+                <p>Up to 100 players. Minimum 8. Every round, one random player is secretly designated as The Cipher. <span className="text-[#FFBF00]">The Cipher knows their identity.</span></p>
               )}
               <p className="text-white font-bold tracking-widest mt-2">VOTE HIERARCHY — RESOLVED IN ORDER</p>
               <p className="text-[#DC143C] font-bold">1. OVERPOPULATION</p>
               <p>If more than {gameState.overpopulationThresholdPct ?? 70}% of players vote Blue, the system overloads. Everyone dies.</p>
               {gameState.gameMode !== "wolveless" && (
                 <>
-                  <p className="text-[#FFBF00] font-bold">2. THE WOLF'S BITE</p>
-                  <p>If the Wolf voted for the Majority color, the Wolf's Bite activates: all players who voted for the Minority color die.</p>
+                  <p className="text-[#FFBF00] font-bold">2. THE CIPHER'S BITE</p>
+                  <p>If the Cipher voted for the Majority color, the Cipher's Bite activates: all players who voted for the Minority color die.</p>
                 </>
               )}
               <p className="text-zinc-300 font-bold">{gameState.gameMode !== "wolveless" ? "3." : "2."} STANDARD RESOLUTION</p>
@@ -1422,7 +1570,7 @@ export function Screens({
               {gameState.gameMode !== "wolveless" && (
                 <>
                   <p className="text-[#00FFFF] font-bold">THE BLIND MARTYR</p>
-                  <p>If the Wolf voted Blue AND total Blue votes were {gameState.blindMartyrThresholdPct ?? 30}% or less: the Wolf and Blue voters die, but their sacrifice permanently frees survivors.</p>
+                  <p>If the Cipher voted Blue AND total Blue votes were {gameState.blindMartyrThresholdPct ?? 30}% or less: the Cipher and Blue voters die, but their sacrifice permanently frees survivors.</p>
                 </>
               )}
               <p className="text-zinc-600 text-xs mt-4">NOTE: To escape, you cannot simply vote 100% Red forever. You must risk some Blue votes to trigger an exit condition.</p>
@@ -1496,7 +1644,7 @@ export function Screens({
               SURVIVAL CONFIRMED.
             </motion.h1>
             {gameState.resolution?.clearCondition === "blind_martyr" && (
-              <p className="text-[#FFBF00] tracking-widest text-sm">THE WOLF SACRIFICED THEMSELVES.</p>
+              <p className="text-[#FFBF00] tracking-widest text-sm">THE CIPHER SACRIFICED THEMSELVES.</p>
             )}
             {gameState.resolution?.clearCondition === "bloodbath" && (
               <p className="text-[#00FFFF] tracking-widest text-sm">QUOTA MET. SURVIVORS RELEASED.</p>
