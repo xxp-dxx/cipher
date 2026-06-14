@@ -11,6 +11,8 @@ import {
   RESOLUTION_DURATION_MS,
   MIN_PLAYERS,
   MAX_PLAYERS,
+  getMinPlayers,
+  getMaxPlayers,
 } from "./constants.js";
 import { generateBotMessage, generateBotVote } from "./ai.js";
 import { logger } from "../lib/logger.js";
@@ -143,7 +145,7 @@ function assignWolves(lobby: Lobby): void {
   const alive = [...lobby.players.values()].filter((p) => p.alive);
   if (lobby.gameMode === "wolveless") return;
 
-  // "local" and "standard" both assign exactly 1 wolf
+  // "local", "standard", "compact", "local-compact" all assign exactly 1 wolf
   const count = lobby.gameMode === "multi-wolf"
     ? Math.min(lobby.wolfCount, Math.floor(alive.length / 2))
     : 1;
@@ -172,8 +174,8 @@ function startDiscussion(io: Server, lobby: Lobby) {
 }
 
 function scheduleBotMessages(io: Server, lobby: Lobby) {
-  // In local mode there are no bots; skip entirely
-  if (lobby.gameMode === "local") return;
+  // In local/in-person modes there are no bots; skip entirely
+  if (lobby.gameMode === "local" || lobby.gameMode === "local-compact") return;
 
   const bots = [...lobby.players.values()].filter((p) => p.isBot && p.alive);
   if (bots.length === 0) return;
@@ -454,7 +456,7 @@ export function setupLobbyHandlers(io: Server) {
         hostId: socket.id,
         isPrivate: !!data.isPrivate,
         difficulty: (["easy", "normal", "hard"].includes(data.difficulty) ? data.difficulty : "normal") as any,
-        gameMode: (["standard", "wolveless", "multi-wolf", "local"].includes(data.gameMode) ? data.gameMode : "standard") as any,
+        gameMode: (["standard", "wolveless", "multi-wolf", "local", "compact", "local-compact"].includes(data.gameMode) ? data.gameMode : "standard") as any,
         wolfCount: Math.max(2, Math.min(10, Number(data.wolfCount) || 2)),
         phase: "lobby",
         players: new Map([[socket.id, player]]),
@@ -470,10 +472,12 @@ export function setupLobbyHandlers(io: Server) {
         botTimers: [],
       };
 
-      // Local (in-person) mode never allows bots — players are physically present
-      const effectiveBotCount = lobby.gameMode === "local"
+      // Local (in-person) modes never allow bots — players are physically present
+      const isLocalMode = lobby.gameMode === "local" || lobby.gameMode === "local-compact";
+      const maxBots = getMaxPlayers(lobby.gameMode) - 1;
+      const effectiveBotCount = isLocalMode
         ? 0
-        : Math.max(0, Math.min(MAX_PLAYERS - 1, Number(data.botCount) || 0));
+        : Math.max(0, Math.min(maxBots, Number(data.botCount) || 0));
 
       const usedNames = new Set<string>();
       const allBotNames = BOT_NAMES();
@@ -506,7 +510,7 @@ export function setupLobbyHandlers(io: Server) {
       const lobby = lobbies.get(data.lobbyId.toUpperCase());
       if (!lobby) { socket.emit("error", { message: "LOBBY NOT FOUND." }); return; }
       if (lobby.phase !== "lobby") { socket.emit("error", { message: "GAME IN PROGRESS." }); return; }
-      if (lobby.players.size >= MAX_PLAYERS) { socket.emit("error", { message: "LOBBY FULL." }); return; }
+      if (lobby.players.size >= getMaxPlayers(lobby.gameMode)) { socket.emit("error", { message: "LOBBY FULL." }); return; }
 
       const player: Player = {
         id: socket.id,
@@ -567,7 +571,8 @@ export function setupLobbyHandlers(io: Server) {
       const lobby = lobbies.get(lobbyId);
       if (!lobby) return;
       if (lobby.hostId !== socket.id) { socket.emit("error", { message: "ONLY HOST CAN START." }); return; }
-      if (lobby.players.size < MIN_PLAYERS) { socket.emit("error", { message: `MINIMUM ${MIN_PLAYERS} PLAYERS REQUIRED.` }); return; }
+      const minP = getMinPlayers(lobby.gameMode);
+      if (lobby.players.size < minP) { socket.emit("error", { message: `MINIMUM ${minP} PLAYERS REQUIRED.` }); return; }
       if (lobby.phase !== "lobby") return;
 
       lobby.phase = "briefing";
