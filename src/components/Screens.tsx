@@ -139,8 +139,8 @@ function DiscussionScreen({
   const alivePlayer = gameState.players.find((p) => p.isYou && p.alive);
   const aliveCount = gameState.players.filter((p) => p.alive).length;
 
-  // ── Local / in-person mode — no chat, discuss verbally ─────────────────────
-  if (gameState.gameMode === "local") {
+  // ── Local / in-person modes — no chat, discuss verbally ─────────────────────
+  if (gameState.gameMode === "local" || gameState.gameMode === "local-compact") {
     return (
       <motion.div
         key="discussion-local"
@@ -630,7 +630,8 @@ function ResolutionScreen({ gameState }: { gameState: GameState }) {
       setTimeout(() => setStep(1), 1000),
       setTimeout(() => setStep(2), 3000),
       setTimeout(() => setStep(3), 5500),
-      setTimeout(() => setStep(4), 8000),
+      setTimeout(() => setStep(4), 7500),
+      setTimeout(() => setStep(5), 9500),
     ];
     return () => timers.forEach(clearTimeout);
   }, []);
@@ -708,46 +709,112 @@ function ResolutionScreen({ gameState }: { gameState: GameState }) {
           )}
         </AnimatePresence>
 
-        {/* Wolf identity */}
+        {/* Wolf identity — step 3: scanning animation */}
         {!res.overpopulation && step >= 3 && gameState.gameMode !== "wolveless" && (
           <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} className="space-y-2">
             <div className="text-[10px] tracking-widest text-zinc-600">RULE CHECK 2/3</div>
-            <div
-              className="p-4 border"
-              style={{ borderColor: "#FFBF00", boxShadow: "0 0 12px rgba(255,191,0,0.2)" }}
-            >
-              <div className="text-sm font-bold tracking-widest mb-1" style={{ color: "#FFBF00" }}>
-                CIPHER IDENTITY CONFIRMED
+            {step < 4 ? (
+              <div
+                className="p-4 border"
+                style={{ borderColor: "#FFBF00", boxShadow: "0 0 12px rgba(255,191,0,0.08)" }}
+              >
+                <div className="text-sm font-bold tracking-widest mb-3" style={{ color: "#a16207" }}>
+                  DECRYPTING CIPHER IDENTITY...
+                </div>
+                <div className="flex items-center gap-3">
+                  <motion.div
+                    animate={{ opacity: [1, 0.2, 1] }}
+                    transition={{ duration: 0.5, repeat: Infinity }}
+                    className="text-[#FFBF00] text-xs tracking-[0.4em] font-bold"
+                  >
+                    ████████████
+                  </motion.div>
+                  <motion.div
+                    animate={{ rotate: 360 }}
+                    transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                    className="w-3 h-3 border border-t-transparent rounded-full shrink-0"
+                    style={{ borderColor: "#FFBF00", borderTopColor: "transparent" }}
+                  />
+                </div>
+                <motion.div
+                  animate={{ opacity: [0.3, 0.7, 0.3] }}
+                  transition={{ duration: 1.2, repeat: Infinity }}
+                  className="mt-2 text-[9px] tracking-widest text-zinc-700"
+                >
+                  ACCESSING CLASSIFIED RECORD...
+                </motion.div>
               </div>
-              <div className="text-white text-xs tracking-widest">
-                THE CIPHER: <span style={{ color: "#FFBF00" }}>{res.wolfName}</span>
-              </div>
-              <div className="text-zinc-400 text-xs tracking-widest mt-1">
-                THE CIPHER VOTED:{" "}
-                <span style={{ color: res.wolfVote === "red" ? "#DC143C" : "#00FFFF" }}>
-                  {res.wolfVote.toUpperCase()}
-                </span>
-              </div>
-              {res.wolfBiteActivated ? (
+            ) : (
+              <motion.div
+                initial={{ opacity: 0, scale: 0.97 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.3 }}
+                className="p-4 border"
+                style={{ borderColor: "#FFBF00", boxShadow: "0 0 24px rgba(255,191,0,0.3)" }}
+              >
+                <motion.div
+                  initial={{ opacity: 0, y: -4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.4 }}
+                  className="text-sm font-bold tracking-widest mb-1"
+                  style={{ color: "#FFBF00" }}
+                >
+                  CIPHER IDENTITY CONFIRMED
+                </motion.div>
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ delay: 0.25 }}
+                  className="text-white text-xs tracking-widest"
+                >
+                  THE CIPHER:{" "}
+                  <motion.span
+                    initial={{ opacity: 0, letterSpacing: "0.8em" }}
+                    animate={{ opacity: 1, letterSpacing: "0.05em" }}
+                    transition={{ delay: 0.35, duration: 0.5 }}
+                    style={{ color: "#FFBF00" }}
+                  >
+                    {res.wolfName}
+                  </motion.span>
+                </motion.div>
                 <motion.div
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   transition={{ delay: 0.5 }}
-                  className="mt-3 text-[#DC143C] text-xs tracking-widest font-bold"
+                  className="text-zinc-400 text-xs tracking-widest mt-1"
                 >
-                  CIPHER IN MAJORITY. THE MINORITY BLEEDS.
+                  THE CIPHER VOTED:{" "}
+                  <span style={{ color: res.wolfVote === "red" ? "#DC143C" : "#00FFFF" }}>
+                    {res.wolfVote.toUpperCase()}
+                  </span>
                 </motion.div>
-              ) : (
-                <div className="mt-3 text-zinc-500 text-xs tracking-widest" style={{ textDecoration: "line-through" }}>
-                  CIPHER IN MINORITY. BITE FAILED.
-                </div>
-              )}
-            </div>
+                {res.wolfBiteActivated ? (
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: 0.7 }}
+                    className="mt-3 text-[#DC143C] text-xs tracking-widest font-bold"
+                  >
+                    CIPHER IN MAJORITY. THE MINORITY BLEEDS.
+                  </motion.div>
+                ) : (
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: 0.7 }}
+                    className="mt-3 text-zinc-500 text-xs tracking-widest"
+                    style={{ textDecoration: "line-through" }}
+                  >
+                    CIPHER IN MINORITY. BITE FAILED.
+                  </motion.div>
+                )}
+              </motion.div>
+            )}
           </motion.div>
         )}
 
         {/* Standard resolution */}
-        {!res.overpopulation && !res.wolfBiteActivated && step >= 4 && (
+        {!res.overpopulation && !res.wolfBiteActivated && step >= 5 && (
           <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} className="space-y-2">
             <div className="text-[10px] tracking-widest text-zinc-600">RULE CHECK 3/3</div>
             <div className="p-4 border border-zinc-800">
@@ -766,7 +833,7 @@ function ResolutionScreen({ gameState }: { gameState: GameState }) {
         )}
 
         {/* Casualties */}
-        {step >= 4 && res.casualties.length > 0 && (
+        {step >= 5 && res.casualties.length > 0 && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-2">
             <div className="text-[10px] tracking-widest text-zinc-600">
               CASUALTIES THIS ROUND ({res.casualties.length})
@@ -791,7 +858,7 @@ function ResolutionScreen({ gameState }: { gameState: GameState }) {
           </motion.div>
         )}
 
-        {step >= 4 && (
+        {step >= 5 && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -1267,6 +1334,7 @@ export function Screens({
               <div className="border border-zinc-900 p-3 space-y-2">
                 <div className="text-[10px] tracking-widest text-zinc-600 text-left">GAME MODE</div>
                 <div className="space-y-1.5">
+                  <div className="text-[9px] tracking-widest text-zinc-700 text-left pb-0.5">8–100 PLAYERS</div>
                   <div className="flex gap-1.5">
                     <DifficultyButton value="standard" current={gameMode} label="STANDARD" sub="1 cipher · full chat" onClick={() => setGameMode("standard")} />
                     <DifficultyButton value="wolveless" current={gameMode} label="CIPHERLESS" sub="No cipher, pure vote" onClick={() => setGameMode("wolveless")} />
@@ -1276,9 +1344,26 @@ export function Screens({
                     value="local"
                     current={gameMode}
                     label="IN-PERSON"
-                    sub="Physical meetup · no bots · discuss verbally · no chat"
+                    sub="8+ players · no bots · discuss verbally · no chat"
                     onClick={() => setGameMode("local")}
                   />
+                  <div className="text-[9px] tracking-widest text-zinc-700 text-left pt-1 pb-0.5">5–7 PLAYERS (SMALL GROUP)</div>
+                  <div className="flex gap-1.5">
+                    <DifficultyButton
+                      value="compact"
+                      current={gameMode}
+                      label="COMPACT"
+                      sub="5–7 players · 1 cipher · online chat"
+                      onClick={() => setGameMode("compact" as GameMode)}
+                    />
+                    <DifficultyButton
+                      value="local-compact"
+                      current={gameMode}
+                      label="COMPACT IN-PERSON"
+                      sub="5–7 players · no bots · discuss verbally"
+                      onClick={() => setGameMode("local-compact" as GameMode)}
+                    />
+                  </div>
                 </div>
                 {gameMode === "multi-wolf" && (
                   <div className="flex items-center justify-between pt-1">
@@ -1298,8 +1383,8 @@ export function Screens({
                 )}
               </div>
 
-              {/* Bot count — hidden in local/in-person mode */}
-              {gameMode !== "local" && (
+              {/* Bot count — hidden in local/in-person modes */}
+              {gameMode !== "local" && gameMode !== "local-compact" && (
                 <div className="border border-zinc-900 p-3 space-y-2">
                   <div className="flex items-center justify-between">
                     <span className="text-[10px] tracking-widest text-zinc-600">BOTS</span>
@@ -1317,18 +1402,19 @@ export function Screens({
                   </div>
                   {botCount > 0 && (
                     <div className="text-[10px] tracking-widest text-right"
-                      style={{ color: botCount + 1 >= 8 ? "#52525b" : "#DC143C" }}>
-                      {botCount + 1 >= 8
+                      style={{ color: botCount + 1 >= (gameMode === "compact" ? 5 : 8) ? "#52525b" : "#DC143C" }}>
+                      {botCount + 1 >= (gameMode === "compact" ? 5 : 8)
                         ? `${botCount + 1} TOTAL — READY TO START`
-                        : `${8 - (botCount + 1)} MORE NEEDED FOR MINIMUM`}
+                        : `${(gameMode === "compact" ? 5 : 8) - (botCount + 1)} MORE NEEDED FOR MINIMUM`}
                     </div>
                   )}
                 </div>
               )}
-              {gameMode === "local" && (
+              {(gameMode === "local" || gameMode === "local-compact") && (
                 <div className="border border-zinc-900 p-3 text-[10px] tracking-widest text-zinc-600">
-                  IN-PERSON MODE — all players must join with their own device using the lobby code.
-                  No bots. No chat. Discuss the vote out loud.
+                  {gameMode === "local-compact"
+                    ? "COMPACT IN-PERSON — 5 to 7 players each join with their own device. No bots. No chat. Discuss the vote out loud."
+                    : "IN-PERSON MODE — all players must join with their own device using the lobby code. No bots. No chat. Discuss the vote out loud."}
                 </div>
               )}
 
@@ -1402,7 +1488,7 @@ export function Screens({
           )}
 
           <div className="text-[10px] tracking-widest text-zinc-700 border-t border-zinc-900 pt-4">
-            8 MINIMUM · 100 MAXIMUM · ONE OF THEM IS THE CIPHER
+            5–7 OR 8–100 PLAYERS · ONE OF THEM IS THE CIPHER
           </div>
         </motion.div>
       </div>
@@ -1507,7 +1593,7 @@ export function Screens({
               {isHost ? (
                 <Button
                   onClick={startGame}
-                  disabled={gameState.playerCount < 8}
+                  disabled={gameState.playerCount < (["compact", "local-compact"].includes(gameState.gameMode) ? 5 : 8)}
                   className="rounded-none bg-[#DC143C] hover:bg-red-700 text-white px-10 sm:px-16 py-5 sm:py-6 text-lg sm:text-xl tracking-[0.3em] disabled:bg-zinc-900 disabled:text-zinc-700 w-full sm:w-auto"
                 >
                   INITIATE SEQUENCE
@@ -1521,11 +1607,14 @@ export function Screens({
                   AWAITING HOST COMMAND
                 </motion.div>
               )}
-              {gameState.playerCount < 8 && (
-                <div className="text-[10px] text-zinc-700 tracking-widest">
-                  MINIMUM: 8 SUBJECTS · {8 - gameState.playerCount} MORE NEEDED
-                </div>
-              )}
+              {(() => {
+                const minP = ["compact", "local-compact"].includes(gameState.gameMode) ? 5 : 8;
+                return gameState.playerCount < minP ? (
+                  <div className="text-[10px] text-zinc-700 tracking-widest">
+                    MINIMUM: {minP} SUBJECTS · {minP - gameState.playerCount} MORE NEEDED
+                  </div>
+                ) : null;
+              })()}
             </div>
           </motion.div>
         )}
@@ -1547,6 +1636,10 @@ export function Screens({
                 <p>Up to 100 players. Minimum 8. This game has no Cipher — rounds are resolved by pure vote mechanics.</p>
               ) : gameState.gameMode === "multi-wolf" ? (
                 <p>Up to 100 players. Minimum 8. Each round, <span className="text-[#FFBF00]">{gameState.wolfCount} random players</span> are secretly designated as Ciphers. For the Pack Bite to activate, <span className="text-[#FFBF00]">all ciphers must vote the same color</span>.</p>
+              ) : gameState.gameMode === "compact" ? (
+                <p>5 to 7 players. Full online chat. Every round, one random player is secretly designated as The Cipher. <span className="text-[#FFBF00]">The Cipher knows their identity.</span></p>
+              ) : gameState.gameMode === "local-compact" ? (
+                <p>5 to 7 players. In-person only — discuss the vote out loud, no in-game chat. Every round, one random player is secretly designated as The Cipher. <span className="text-[#FFBF00]">The Cipher knows their identity.</span></p>
               ) : (
                 <p>Up to 100 players. Minimum 8. Every round, one random player is secretly designated as The Cipher. <span className="text-[#FFBF00]">The Cipher knows their identity.</span></p>
               )}
