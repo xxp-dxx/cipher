@@ -9,6 +9,7 @@ import {
   OVERPOPULATION_PCT,
   CONDITION_CHECK_DURATION_MS,
   RESOLUTION_DURATION_MS,
+  CIPHER_WIN_THRESHOLD,
   MIN_PLAYERS,
   MAX_PLAYERS,
   getMinPlayers,
@@ -85,7 +86,9 @@ function buildClientState(lobby: Lobby, socketId: string): ClientGameState {
     difficulty: lobby.difficulty,
     gameMode: lobby.gameMode,
     wolfCount: lobby.wolfCount,
-    chat: lobby.chat,
+    chat: player && !player.alive
+      ? lobby.chat
+      : lobby.chat.filter((m) => !m.isGhost),
     history: lobby.history,
     resolution,
     discussionEndsAt: lobby.discussionEndsAt,
@@ -99,6 +102,8 @@ function buildClientState(lobby: Lobby, socketId: string): ClientGameState {
     isSpectator,
     liveRedCount,
     liveBlueCount,
+    totalCipherBites: lobby.history.filter((r) => r.biteActivated).length,
+    cipherBiteThreshold: CIPHER_WIN_THRESHOLD[lobby.difficulty],
   };
 }
 
@@ -156,6 +161,8 @@ function buildSpectatorState(lobby: Lobby, socketId: string): ClientGameState {
     isSpectator: true,
     liveRedCount,
     liveBlueCount,
+    totalCipherBites: lobby.history.filter((r) => r.biteActivated).length,
+    cipherBiteThreshold: CIPHER_WIN_THRESHOLD[lobby.difficulty],
   };
 }
 
@@ -444,7 +451,14 @@ function resolveVotes(io: Server, lobby: Lobby) {
     broadcastState(io, lobby);
 
     lobby.phaseTimer = setTimeout(() => {
-      if (clearCondition !== null) {
+      const totalBites = lobby.history.filter((r) => r.biteActivated).length;
+      const cipherWonByBites = totalBites >= CIPHER_WIN_THRESHOLD[lobby.difficulty] && lobby.wolfIds.size > 0;
+      const cipherWonByMartyr = clearCondition === "blind_martyr";
+
+      if (cipherWonByBites || cipherWonByMartyr) {
+        lobby.phase = "cipher_victory";
+        broadcastState(io, lobby);
+      } else if (clearCondition !== null) {
         lobby.phase = survivorCount === 0 ? "game_over" : "victory";
         broadcastState(io, lobby);
       } else {
@@ -646,19 +660,35 @@ export function setupLobbyHandlers(io: Server) {
       const lobbyId = socketToLobby.get(socket.id);
       if (!lobbyId) return;
       const lobby = lobbies.get(lobbyId);
-      if (!lobby || lobby.phase !== "discussion") return;
-      if (lobby.gameMode === "local") return; // No chat in local/in-person mode
+      if (!lobby) return;
       const player = lobby.players.get(socket.id);
-      if (!player || !player.alive) return;
+      if (!player) return;
+      if (lobby.gameMode === "local" || lobby.gameMode === "local-compact") return;
 
+      const isAlive = player.alive;
+      // Alive players can only chat during discussion; dead players can ghost-chat during discussion + voting
+      const allowedPhases: string[] = isAlive ? ["discussion"] : ["discussion", "voting"];
+      if (!allowedPhases.includes(lobby.phase)) return;
+
+      const isGhost = !isAlive;
       const msg: ChatMessage = {
         playerId: socket.id,
         playerName: player.name,
         text: data.text.slice(0, 300),
         timestamp: Date.now(),
+        isGhost,
       };
       lobby.chat.push(msg);
-      io.to(lobbyId).emit("chat_message", msg);
+
+      if (!isGhost) {
+        io.to(lobbyId).emit("chat_message", msg);
+      } else {
+        // Ghost messages: send only to dead players + spectators
+        for (const [pid, p] of lobby.players) {
+          if (!p.alive) io.to(pid).emit("chat_message", msg);
+        }
+      }
+      // Always send ghost and normal messages to spectators
       for (const [sid, lid] of spectators) {
         if (lid === lobbyId) io.to(sid).emit("chat_message", msg);
       }
