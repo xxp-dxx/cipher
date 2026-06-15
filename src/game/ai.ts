@@ -51,12 +51,13 @@ export async function generateBotMessage(ctx: BotContext): Promise<string> {
   const noChat = !recentChatText;
 
   const systemPrompt = ctx.isWolf
-    ? `You are ${ctx.botName} in a vote game. You are secretly the wolf.
-Game: everyone votes RED or BLUE. If blue > 70% everyone dies (overpopulation). If you (wolf) vote with the majority, the minority all die. Your goal: vote with the majority and activate your bite.
-Rules: ONE sentence only. 8-12 words max. Talk about vote strategy, not about being a wolf. Sound like a normal player. No greetings, no filler, no questions.`
+    ? `You are ${ctx.botName} in a vote game. You are secretly the Cipher — a hidden saboteur.
+Game: everyone votes RED or BLUE. If blue > 70% everyone dies (overpopulation). If YOU vote with the majority, the minority all die — that is your goal.
+Your strategy: subtly steer people toward whichever color looks like it will be the majority. Do NOT reveal you are the Cipher. Sound like a normal analytical player. Occasionally endorse the dominant-looking vote, or gently cast doubt on the minority.
+Rules: ONE sentence only. 8-12 words max. No greetings, no filler, no questions. Never say "cipher" or "wolf".`
     : `You are ${ctx.botName} in a vote game. You are a regular player trying to survive.
-Game: everyone votes RED or BLUE. If blue > 70% everyone dies (overpopulation). Red is always safe. Blue only works if 51-70% vote blue. There's a hidden wolf who wants to vote with the majority.
-Strategy: Red is safe. Blue is risky. Warn about overpopulation if blue gets high.
+Game: everyone votes RED or BLUE. If blue > 70% everyone dies (overpopulation). Red is always safe. Blue only works if 51-70% vote blue. There is a hidden Cipher who wants to vote with the majority.
+Strategy: Red is safer. Blue only if there is clear coordination. Watch for the Cipher steering people.
 Rules: ONE sentence only. 8-12 words max. Talk tactics. No greetings, no filler, no questions.`;
 
   const userPrompt = noChat
@@ -102,9 +103,9 @@ export async function generateBotVote(ctx: BotContext & {
   const chatSummary = ctx.recentMessages.slice(-6).map(m => `${m.playerName}: ${m.text}`).join("\n") || "(no chat)";
 
   const systemPrompt = ctx.isWolf
-    ? `You are the wolf in a vote game. Vote with the MAJORITY color to activate your bite.
-Current votes: RED ${ctx.redCount}, BLUE ${ctx.blueCount}, ${remainingVoters} yet to vote.
-NEVER vote blue if blue is already above 60% (overpopulation kills everyone including you).
+    ? `You are the Cipher in a vote game. Your goal: vote with whichever color ends up being the majority so your bite activates and the minority dies.
+Current votes so far: RED ${ctx.redCount}, BLUE ${ctx.blueCount}, ${remainingVoters} still to vote.
+Strategy: if RED is already leading, vote RED. If BLUE is leading but below 60%, vote BLUE. NEVER vote blue if blue is already at 60%+ (overpopulation kills everyone including you).
 Answer with ONLY the word "red" or "blue".`
     : `You are a regular player. Vote to survive.
 Current votes: RED ${ctx.redCount} (${(ctx.redCount/ctx.aliveCount*100).toFixed(0)}%), BLUE ${ctx.blueCount} (${currentBluePct.toFixed(0)}%), ${remainingVoters} yet to vote.
@@ -149,6 +150,10 @@ function getOfflineBotMessage(ctx: BotContext): string {
     "Anyone pushing blue is risking everyone's life.",
     "Red majority is the only safe play this round.",
     "Blue will get us all killed if it goes too high.",
+    "The numbers lean red — I'm following the majority.",
+    "Whatever the group decides, I'm going with it.",
+    "I'll match whatever direction we're coordinating.",
+    "Looks like red is the play — going with the crowd.",
   ];
 
   const pool = ctx.isWolf ? wolfMessages : (Math.random() > 0.25 ? redMessages : blueMessages);
