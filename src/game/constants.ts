@@ -44,3 +44,9 @@ export function getMaxPlayers(gameMode: GameMode): number {
 
 export const CONDITION_CHECK_DURATION_MS = 7_000;
 export const RESOLUTION_DURATION_MS = 13_000;
+
+export const CIPHER_WIN_THRESHOLD: Record<Difficulty, number> = {
+  easy: 3,
+  normal: 2,
+  hard: 1,
+};
