@@ -48,8 +48,21 @@ function getBloodbathThreshold(lobby: Lobby): number {
 function buildClientState(lobby: Lobby, socketId: string): ClientGameState {
   const player = lobby.players.get(socketId);
   const isSpectator = spectators.has(socketId);
+  const isWolf = lobby.wolfIds.has(socketId);
   const alivePlayers = [...lobby.players.values()].filter((p) => p.alive);
   const votedCount = alivePlayers.filter((p) => p.vote !== null).length;
+  const liveRedCount = isWolf && lobby.phase === "voting" ? alivePlayers.filter((p) => p.vote === "red").length : 0;
+  const liveBlueCount = isWolf && lobby.phase === "voting" ? alivePlayers.filter((p) => p.vote === "blue").length : 0;
+
+  // When bite activated, mask Cipher identity from non-wolf players
+  const resolution = lobby.resolution
+    ? (() => {
+        if (lobby.resolution.wolfBiteActivated && !isWolf) {
+          return { ...lobby.resolution, wolfName: "CLASSIFIED", wolfId: "" };
+        }
+        return lobby.resolution;
+      })()
+    : null;
 
   return {
     lobbyId: lobby.id,
@@ -74,7 +87,7 @@ function buildClientState(lobby: Lobby, socketId: string): ClientGameState {
     wolfCount: lobby.wolfCount,
     chat: lobby.chat,
     history: lobby.history,
-    resolution: lobby.resolution,
+    resolution,
     discussionEndsAt: lobby.discussionEndsAt,
     votingEndsAt: lobby.votingEndsAt,
     playerCount: lobby.players.size,
@@ -84,6 +97,8 @@ function buildClientState(lobby: Lobby, socketId: string): ClientGameState {
     myVote: player?.vote ?? null,
     youAreWolf: !isSpectator && lobby.wolfIds.has(socketId),
     isSpectator,
+    liveRedCount,
+    liveBlueCount,
   };
 }
 
@@ -103,6 +118,8 @@ function broadcastState(io: Server, lobby: Lobby) {
 function buildSpectatorState(lobby: Lobby, socketId: string): ClientGameState {
   const alivePlayers = [...lobby.players.values()].filter((p) => p.alive);
   const votedCount = alivePlayers.filter((p) => p.vote !== null).length;
+  const liveRedCount = lobby.phase === "voting" ? alivePlayers.filter((p) => p.vote === "red").length : 0;
+  const liveBlueCount = lobby.phase === "voting" ? alivePlayers.filter((p) => p.vote === "blue").length : 0;
 
   return {
     lobbyId: lobby.id,
@@ -137,6 +154,8 @@ function buildSpectatorState(lobby: Lobby, socketId: string): ClientGameState {
     myVote: null,
     youAreWolf: false,
     isSpectator: true,
+    liveRedCount,
+    liveBlueCount,
   };
 }
 
@@ -144,6 +163,18 @@ function assignWolves(lobby: Lobby): void {
   lobby.wolfIds.clear();
   const alive = [...lobby.players.values()].filter((p) => p.alive);
   if (lobby.gameMode === "wolveless") return;
+
+  // Sticky Cipher: if the previous round's Cipher bit, they carry over
+  if (lobby.stickyWolfIds.size > 0) {
+    const stickyAlive = [...lobby.stickyWolfIds].filter((id) => {
+      const p = lobby.players.get(id);
+      return p && p.alive;
+    });
+    if (stickyAlive.length > 0) {
+      for (const id of stickyAlive) lobby.wolfIds.add(id);
+      return;
+    }
+  }
 
   // "local", "standard", "compact", "local-compact" all assign exactly 1 wolf
   const count = lobby.gameMode === "multi-wolf"
@@ -341,6 +372,10 @@ function resolveVotes(io: Server, lobby: Lobby) {
 
   const peacefulRound = !wolfBiteActivated && !overpopulation && blueCount > redCount;
 
+  // Stalemate: nobody voted blue (or cipher bite hit an empty minority) → zero casualties, no movement.
+  // Treat this as a deadlock — the system breaks down and survivors are freed.
+  const stalemate = !overpopulation && !peacefulRound && casualties.length === 0;
+
   for (const id of casualties) {
     const p = lobby.players.get(id);
     if (p) p.alive = false;
@@ -348,8 +383,10 @@ function resolveVotes(io: Server, lobby: Lobby) {
 
   const survivorCount = alive.length - casualties.length;
 
-  let clearCondition: "bloodbath" | "blind_martyr" | null = null;
-  if (survivorCount <= getBloodbathThreshold(lobby)) {
+  let clearCondition: "bloodbath" | "blind_martyr" | "stalemate" | null = null;
+  if (stalemate) {
+    clearCondition = "stalemate";
+  } else if (survivorCount <= getBloodbathThreshold(lobby)) {
     clearCondition = "bloodbath";
   } else if (lobby.gameMode !== "wolveless" && wolfVote === "blue") {
     if (lobby.gameMode === "multi-wolf") {
@@ -385,6 +422,9 @@ function resolveVotes(io: Server, lobby: Lobby) {
     survivorCount,
   };
 
+  // Sticky Cipher: carry same wolf into next round if bite activated this round
+  lobby.stickyWolfIds = wolfBiteActivated ? new Set(lobby.wolfIds) : new Set();
+
   lobby.history.push({
     round: lobby.round,
     wolfId,
@@ -394,6 +434,7 @@ function resolveVotes(io: Server, lobby: Lobby) {
     clearCondition,
     redPct,
     bluePct,
+    biteActivated: wolfBiteActivated,
   });
 
   broadcastState(io, lobby);
@@ -465,6 +506,7 @@ export function setupLobbyHandlers(io: Server) {
         round: 1,
         startingPlayerCount: 0,
         wolfIds: new Set(),
+        stickyWolfIds: new Set(),
         discussionEndsAt: null,
         votingEndsAt: null,
         resolution: null,
