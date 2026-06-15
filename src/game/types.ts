@@ -23,9 +23,10 @@ export interface RoundHistory {
   wolfName: string;
   wolfVote: "red" | "blue";
   casualties: string[];
-  clearCondition: "bloodbath" | "blind_martyr" | null;
+  clearCondition: "bloodbath" | "blind_martyr" | "stalemate" | null;
   redPct: number;
   bluePct: number;
+  biteActivated: boolean;
 }
 
 export interface Resolution {
@@ -42,7 +43,7 @@ export interface Resolution {
   wolfInMinority: boolean;
   peacefulRound: boolean;
   casualties: string[];
-  clearCondition: "bloodbath" | "blind_martyr" | null;
+  clearCondition: "bloodbath" | "blind_martyr" | "stalemate" | null;
   survivorCount: number;
 }
 
@@ -60,6 +61,7 @@ export interface Lobby {
   round: number;
   startingPlayerCount: number;
   wolfIds: Set<string>;
+  stickyWolfIds: Set<string>;
   discussionEndsAt: number | null;
   votingEndsAt: number | null;
   resolution: Resolution | null;
@@ -100,4 +102,6 @@ export interface ClientGameState {
   myVote: "red" | "blue" | null;
   youAreWolf: boolean;
   isSpectator: boolean;
+  liveRedCount: number;
+  liveBlueCount: number;
 }
