@@ -70,13 +70,17 @@ function PlayerTile({ player, highlight }: { player: Player; highlight?: "wolf" 
 }
 
 // ── Cipher identity banner ─────────────────────────────────────────────────────
-function WolfBanner({ gameMode }: { gameMode: GameMode }) {
+function WolfBanner({ gameMode, totalCipherBites, cipherBiteThreshold }: {
+  gameMode: GameMode;
+  totalCipherBites: number;
+  cipherBiteThreshold: number;
+}) {
   return (
     <motion.div
       initial={{ opacity: 0, y: -8 }}
       animate={{ opacity: [0.7, 1, 0.7], y: 0 }}
       transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-      className="mx-4 mt-2 px-4 py-2 border text-center"
+      className="mx-4 mt-2 px-4 py-2 border flex items-center justify-between"
       style={{
         borderColor: "#FFBF00",
         background: "rgba(255,191,0,0.05)",
@@ -86,9 +90,26 @@ function WolfBanner({ gameMode }: { gameMode: GameMode }) {
       <span className="text-xs font-bold tracking-[0.4em]" style={{ color: "#FFBF00" }}>
         {gameMode === "multi-wolf" ? "YOU ARE ONE OF THE CIPHERS." : "YOU ARE THE CIPHER."}
       </span>
-      <span className="text-[10px] tracking-widest ml-3" style={{ color: "#a16207" }}>
-        YOUR IDENTITY IS SECRET.
-      </span>
+      <div className="flex items-center gap-3">
+        <span className="text-[10px] tracking-widest" style={{ color: "#a16207" }}>
+          STRIKES
+        </span>
+        <div className="flex gap-1">
+          {Array.from({ length: cipherBiteThreshold }).map((_, i) => (
+            <div
+              key={i}
+              className="w-3 h-3 border"
+              style={{
+                borderColor: i < totalCipherBites ? "#FFBF00" : "#3f3f46",
+                background: i < totalCipherBites ? "rgba(255,191,0,0.4)" : "transparent",
+              }}
+            />
+          ))}
+        </div>
+        <span className="text-[10px] font-bold tabular-nums" style={{ color: "#FFBF00" }}>
+          {totalCipherBites}/{cipherBiteThreshold}
+        </span>
+      </div>
     </motion.div>
   );
 }
@@ -150,7 +171,7 @@ function DiscussionScreen({
         className="bg-black text-gray-300 font-mono flex flex-col items-center justify-center"
         style={{ minHeight: "100dvh" }}
       >
-        {gameState.youAreWolf && <WolfBanner gameMode={gameState.gameMode} />}
+        {gameState.youAreWolf && <WolfBanner gameMode={gameState.gameMode} totalCipherBites={gameState.totalCipherBites} cipherBiteThreshold={gameState.cipherBiteThreshold} />}
         <div className="space-y-8 text-center px-8 max-w-sm w-full">
           <div className="space-y-2">
             <div className="text-[10px] tracking-widest text-zinc-600">ROUND {String(gameState.round).padStart(2, "0")}</div>
@@ -212,7 +233,7 @@ function DiscussionScreen({
         className="bg-black text-gray-300 font-mono flex flex-col"
         style={{ height: "100dvh" }}
       >
-        {gameState.youAreWolf && <WolfBanner gameMode={gameState.gameMode} />}
+        {gameState.youAreWolf && <WolfBanner gameMode={gameState.gameMode} totalCipherBites={gameState.totalCipherBites} cipherBiteThreshold={gameState.cipherBiteThreshold} />}
         {isSpectator && <SpectatorBanner />}
 
         {/* Mobile header: round + timer + alive count + player toggle */}
@@ -258,12 +279,13 @@ function DiscussionScreen({
             </div>
           )}
           {gameState.chat.map((m, i) => (
-            <div key={i} className="text-sm leading-snug">
+            <div key={i} className={`text-sm leading-snug ${m.isGhost ? "opacity-60" : ""}`}>
               <span className="text-zinc-500 text-[10px]">
                 [{new Date(m.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}]{" "}
               </span>
-              <span className="text-[#DC143C] font-bold">{m.playerName}: </span>
-              <span className="text-gray-300">{m.text}</span>
+              {m.isGhost && <span className="text-zinc-700 text-[10px]">[†] </span>}
+              <span className={`font-bold ${m.isGhost ? "text-zinc-600" : "text-[#DC143C]"}`}>{m.playerName}: </span>
+              <span className={m.isGhost ? "text-zinc-600" : "text-gray-300"}>{m.text}</span>
             </div>
           ))}
         </div>
@@ -275,18 +297,18 @@ function DiscussionScreen({
               value={msg}
               onChange={(e) => setMsg(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && submit()}
-              placeholder={alivePlayer ? "TRANSMIT..." : "YOU ARE ELIMINATED."}
+              placeholder={alivePlayer ? "TRANSMIT..." : "† GHOST CHANNEL..."}
               maxLength={300}
-              disabled={!alivePlayer}
-              className="bg-black border-zinc-800 font-mono text-sm rounded-none focus:border-zinc-500"
+              disabled={isSpectator}
+              className={`bg-black border-zinc-800 font-mono text-sm rounded-none focus:border-zinc-500 ${!alivePlayer ? "text-zinc-600 placeholder:text-zinc-800" : ""}`}
             />
             <Button
               onClick={submit}
-              disabled={!alivePlayer}
+              disabled={isSpectator}
               variant="outline"
               className="rounded-none border-zinc-700 font-mono text-xs tracking-widest shrink-0"
             >
-              SEND
+              {alivePlayer ? "SEND" : "†"}
             </Button>
           </div>
         ) : (
@@ -348,7 +370,7 @@ function DiscussionScreen({
       exit={{ opacity: 0, scale: 0.95 }}
       className="h-screen flex flex-col bg-black text-gray-300 font-mono"
     >
-      {gameState.youAreWolf && <WolfBanner gameMode={gameState.gameMode} />}
+      {gameState.youAreWolf && <WolfBanner gameMode={gameState.gameMode} totalCipherBites={gameState.totalCipherBites} cipherBiteThreshold={gameState.cipherBiteThreshold} />}
       {isSpectator && <SpectatorBanner />}
 
       <div className="flex items-center justify-between px-6 py-3 border-b border-zinc-900">
@@ -387,12 +409,13 @@ function DiscussionScreen({
               </div>
             )}
             {gameState.chat.map((m, i) => (
-              <div key={i} className="text-sm">
+              <div key={i} className={`text-sm ${m.isGhost ? "opacity-60" : ""}`}>
                 <span className="text-zinc-500 text-xs">
                   [{new Date(m.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}]{" "}
                 </span>
-                <span className="text-[#DC143C] font-bold">{m.playerName}: </span>
-                <span className="text-gray-300">{m.text}</span>
+                {m.isGhost && <span className="text-zinc-700 text-xs">[†] </span>}
+                <span className={`font-bold ${m.isGhost ? "text-zinc-600" : "text-[#DC143C]"}`}>{m.playerName}: </span>
+                <span className={m.isGhost ? "text-zinc-600" : "text-gray-300"}>{m.text}</span>
               </div>
             ))}
           </div>
@@ -402,18 +425,18 @@ function DiscussionScreen({
                 value={msg}
                 onChange={(e) => setMsg(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && submit()}
-                placeholder={alivePlayer ? "TRANSMIT MESSAGE..." : "YOU ARE ELIMINATED."}
+                placeholder={alivePlayer ? "TRANSMIT MESSAGE..." : "† GHOST CHANNEL — WHISPER FROM BEYOND..."}
                 maxLength={300}
-                disabled={!alivePlayer}
-                className="bg-black border-zinc-800 font-mono text-sm rounded-none focus:border-zinc-500"
+                disabled={isSpectator}
+                className={`bg-black border-zinc-800 font-mono text-sm rounded-none focus:border-zinc-500 ${!alivePlayer ? "text-zinc-600 placeholder:text-zinc-800" : ""}`}
               />
               <Button
                 onClick={submit}
-                disabled={!alivePlayer}
+                disabled={isSpectator}
                 variant="outline"
                 className="rounded-none border-zinc-700 font-mono text-xs tracking-widest shrink-0"
               >
-                SEND
+                {alivePlayer ? "SEND" : "†"}
               </Button>
             </div>
           )}
@@ -438,13 +461,85 @@ function DiscussionScreen({
   );
 }
 
+// ── Ghost voting panel (for eliminated players during vote) ───────────────────
+function GhostVotingPanel({ gameState, sendMessage, isMobile }: {
+  gameState: GameState;
+  sendMessage: (t: string) => void;
+  isMobile: boolean;
+}) {
+  const [msg, setMsg] = useState("");
+  const chatRef = useRef<HTMLDivElement>(null);
+  const ghostMessages = gameState.chat.filter((m) => m.isGhost);
+
+  useEffect(() => {
+    if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight;
+  }, [ghostMessages.length]);
+
+  const submit = () => {
+    if (!msg.trim()) return;
+    sendMessage(msg.trim());
+    setMsg("");
+  };
+
+  return (
+    <div className="w-full flex flex-col">
+      <div className="flex-1 flex flex-col items-center justify-center px-6 py-6 text-center">
+        <motion.div
+          animate={{ opacity: [0.3, 0.6, 0.3] }}
+          transition={{ duration: 2.5, repeat: Infinity }}
+          className={`font-bold tracking-widest ${isMobile ? "text-5xl" : "text-6xl"}`}
+          style={{ color: "#3f3f46" }}
+        >
+          ELIMINATED
+        </motion.div>
+        <div className="text-zinc-700 text-xs tracking-widest mt-2">YOU CANNOT VOTE</div>
+        <div className="text-zinc-800 text-[10px] tracking-widest mt-1">
+          {gameState.votedCount}/{gameState.aliveCount} VOTES CAST
+        </div>
+      </div>
+      <div className="border-t border-zinc-900 p-3 space-y-2">
+        <div className="text-[10px] tracking-widest text-zinc-700">† GHOST CHANNEL — ONLY THE DEAD CAN READ THIS</div>
+        <div ref={chatRef} className="max-h-24 overflow-y-auto space-y-1">
+          {ghostMessages.length === 0 ? (
+            <div className="text-zinc-800 text-[10px] tracking-widest">NO TRANSMISSIONS FROM THE DEAD.</div>
+          ) : ghostMessages.map((m, i) => (
+            <div key={i} className="text-xs text-zinc-600">
+              <span className="text-zinc-700">[†] {m.playerName}: </span>
+              {m.text}
+            </div>
+          ))}
+        </div>
+        <div className="flex gap-2">
+          <Input
+            value={msg}
+            onChange={(e) => setMsg(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && submit()}
+            placeholder="WHISPER FROM BEYOND..."
+            maxLength={300}
+            className="bg-black border-zinc-900 font-mono text-xs rounded-none focus:border-zinc-700 text-zinc-600 placeholder:text-zinc-800"
+          />
+          <Button
+            onClick={submit}
+            variant="outline"
+            className="rounded-none border-zinc-800 text-zinc-700 font-mono text-xs tracking-widest shrink-0"
+          >
+            †
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Voting screen ─────────────────────────────────────────────────────────────
 function VotingScreen({
   gameState,
   castVote,
+  sendMessage,
 }: {
   gameState: GameState;
   castVote: (c: "red" | "blue") => void;
+  sendMessage: (t: string) => void;
 }) {
   const msLeft = useCountdown(gameState.votingEndsAt);
   const pct = gameState.votingEndsAt ? (msLeft / 15000) * 100 : 0;
@@ -488,7 +583,7 @@ function VotingScreen({
       className="flex flex-col bg-black overflow-hidden font-mono"
       style={{ height: "100dvh", ...bgStyle }}
     >
-      {gameState.youAreWolf && <WolfBanner gameMode={gameState.gameMode} />}
+      {gameState.youAreWolf && <WolfBanner gameMode={gameState.gameMode} totalCipherBites={gameState.totalCipherBites} cipherBiteThreshold={gameState.cipherBiteThreshold} />}
       {isSpectator && <SpectatorBanner />}
 
       <div className="px-6 py-4 shrink-0">
@@ -536,9 +631,14 @@ function VotingScreen({
                 BLUE {gameState.liveBlueCount}
               </motion.span>
             </div>
-            <span className="text-[9px] tracking-widest text-zinc-700">
-              {gameState.aliveCount - gameState.votedCount} PENDING
-            </span>
+            <div className="flex flex-col items-end gap-0.5">
+              <span className="text-[9px] tracking-widest text-zinc-700">
+                {gameState.aliveCount - gameState.votedCount} PENDING
+              </span>
+              <span className="text-[9px] tracking-widest font-bold tabular-nums" style={{ color: "#a16207" }}>
+                {gameState.totalCipherBites}/{gameState.cipherBiteThreshold} STRIKES
+              </span>
+            </div>
           </motion.div>
         )}
       </div>
@@ -586,23 +686,8 @@ function VotingScreen({
             </div>
           </div>
         ) : !alivePlayer ? (
-          /* Eliminated player — cannot vote */
-          <div className="w-full flex items-center justify-center">
-            <div className="text-center space-y-4">
-              <motion.div
-                animate={{ opacity: [0.4, 0.7, 0.4] }}
-                transition={{ duration: 2.5, repeat: Infinity }}
-                className={`font-bold tracking-widest ${isMobile ? "text-5xl" : "text-6xl"}`}
-                style={{ color: "#3f3f46" }}
-              >
-                ELIMINATED
-              </motion.div>
-              <div className="text-zinc-700 text-xs tracking-widest">YOU CANNOT VOTE</div>
-              <div className="text-zinc-800 text-[10px] tracking-widest mt-4">
-                {gameState.votedCount}/{gameState.aliveCount} VOTES CAST
-              </div>
-            </div>
-          </div>
+          /* Eliminated player — ghost chat during voting */
+          <GhostVotingPanel gameState={gameState} sendMessage={sendMessage} isMobile={isMobile} />
         ) : chosen ? (
           <div className="w-full flex items-center justify-center">
             <motion.div
@@ -1296,9 +1381,10 @@ function SpectatorDashboard({ gameState }: { gameState: GameState }) {
               <div className="text-zinc-800 text-[10px] tracking-widest">AWAITING TRANSMISSIONS...</div>
             )}
             {gameState.chat.slice(-20).map((m, i) => (
-              <div key={i} className="text-xs">
-                <span className="text-[#DC143C]">{m.playerName}: </span>
-                <span className="text-zinc-400">{m.text}</span>
+              <div key={i} className={`text-xs ${m.isGhost ? "opacity-50" : ""}`}>
+                {m.isGhost && <span className="text-zinc-700">[†] </span>}
+                <span className={m.isGhost ? "text-zinc-600" : "text-[#DC143C]"}>{m.playerName}: </span>
+                <span className={m.isGhost ? "text-zinc-600" : "text-zinc-400"}>{m.text}</span>
               </div>
             ))}
           </div>
@@ -1801,6 +1887,8 @@ export function Screens({
                 <>
                   <p className="text-[#FFBF00] font-bold">2. THE CIPHER'S BITE</p>
                   <p>If the Cipher voted for the Majority color, the Cipher's Bite activates: all players who voted for the Minority color die.</p>
+                  <p className="text-[#FFBF00] font-bold mt-2">⚡ CIPHER WIN CONDITION</p>
+                  <p>Strike successfully <span className="text-[#FFBF00] font-bold">{gameState.cipherBiteThreshold} time{gameState.cipherBiteThreshold !== 1 ? "s" : ""}</span> — or trigger a Blind Martyr — and the Cipher wins. All remaining players lose. The Blind Martyr path means the Cipher sacrifices themselves to end the game on their terms.</p>
                 </>
               )}
               <p className="text-zinc-300 font-bold">{gameState.gameMode !== "wolveless" ? "3." : "2."} STANDARD RESOLUTION</p>
@@ -1839,7 +1927,7 @@ export function Screens({
         )}
 
         {phase === "voting" && (
-          <VotingScreen key="voting" gameState={gameState} castVote={castVote} />
+          <VotingScreen key="voting" gameState={gameState} castVote={castVote} sendMessage={sendMessage} />
         )}
 
         {phase === "resolution" && (
@@ -1849,6 +1937,61 @@ export function Screens({
         {phase === "condition_check" && (
           <ConditionCheckScreen key="condition_check" gameState={gameState} />
         )}
+
+        {phase === "cipher_victory" && (() => {
+          const youAreCipher = gameState.youAreWolf;
+          const totalBites = gameState.totalCipherBites;
+          return (
+            <motion.div
+              key="cipher_victory"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="min-h-screen flex flex-col items-center justify-center p-6 sm:p-8 bg-black space-y-8 sm:space-y-10"
+            >
+              {youAreCipher ? (
+                <>
+                  <motion.h1
+                    className="text-4xl sm:text-7xl font-bold tracking-widest text-center"
+                    style={{ color: "#FFBF00" }}
+                    animate={{ opacity: [0.7, 1, 0.7] }}
+                    transition={{ duration: 1.5, repeat: Infinity }}
+                  >
+                    CIPHER WINS.
+                  </motion.h1>
+                  <motion.p
+                    className="text-lg sm:text-2xl font-bold tracking-widest"
+                    style={{ color: "#FFBF00" }}
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.4 }}
+                  >
+                    YOU STRUCK {totalBites} TIME{totalBites !== 1 ? "S" : ""}.
+                  </motion.p>
+                  <p className="text-zinc-600 tracking-[0.3em] text-xs text-center">THEY NEVER FOUND YOU.</p>
+                </>
+              ) : (
+                <>
+                  <motion.h1
+                    className="text-4xl sm:text-6xl font-bold tracking-widest text-center"
+                    style={{ color: "#DC143C" }}
+                    animate={{ opacity: [0.6, 1, 0.6] }}
+                    transition={{ duration: 2.5, repeat: Infinity }}
+                  >
+                    THE CIPHER PREVAILED.
+                  </motion.h1>
+                  <p className="text-zinc-500 tracking-widest text-sm text-center">
+                    THE CIPHER STRUCK {totalBites} TIME{totalBites !== 1 ? "S" : ""}. YOU NEVER FOUND THEM.
+                  </p>
+                  <p className="text-zinc-700 tracking-[0.3em] text-xs">THE CIPHER WAS NEVER EXPOSED.</p>
+                </>
+              )}
+              <PostMatchStats gameState={gameState} />
+              <Button onClick={() => window.location.reload()} variant="outline" className="rounded-none border-zinc-700 text-white font-mono tracking-wider">
+                PLAY AGAIN
+              </Button>
+            </motion.div>
+          );
+        })()}
 
         {phase === "game_over" && (
           <motion.div
