@@ -12,6 +12,7 @@ export interface ChatMessage {
   playerName: string;
   text: string;
   timestamp: number;
+  isGhost?: boolean;
 }
 
 export type Difficulty = "easy" | "normal" | "hard";
@@ -20,7 +21,7 @@ export type GameMode = "standard" | "wolveless" | "multi-wolf" | "local" | "comp
 export interface GameState {
   lobbyId: string;
   isPrivate: boolean;
-  phase: "lobby" | "briefing" | "discussion" | "voting" | "resolution" | "condition_check" | "game_over" | "victory";
+  phase: "lobby" | "briefing" | "discussion" | "voting" | "resolution" | "condition_check" | "game_over" | "victory" | "cipher_victory";
   players: Player[];
   hostId: string;
   round: number;
@@ -71,4 +72,6 @@ export interface GameState {
   isSpectator: boolean;
   liveRedCount: number;
   liveBlueCount: number;
+  totalCipherBites: number;
+  cipherBiteThreshold: number;
 }
